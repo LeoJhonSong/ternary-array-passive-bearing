@@ -1,5 +1,13 @@
 {
     "conventionalCommits.scopes": [
         "算法框架"
+    ],
+    "cSpell.words": [
+        "cmap",
+        "interp",
+        "interpolant",
+        "lanczos",
+        "perlin",
+        "tileable"
     ]
 }
