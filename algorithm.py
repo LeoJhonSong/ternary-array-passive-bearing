@@ -1,9 +1,12 @@
+from typing import Literal
 import numpy as np
 from scipy import signal
 from scipy.ndimage import gaussian_filter
 
 
 def ambiguity_resolution(phi12_frac: np.ndarray, phi23_frac: np.ndarray, K: float, d: float):
+    # TODO: 1. 缺少文档
+    # TODO: 2. 一次应该只需要输入一个值
     phi43 = phi23_frac - phi12_frac
     # 1. 修正phi43使-1/2 < phi_43 < 1/2
     phi43 = phi43 - (phi43 > 0.5).astype(int) + (phi43 < -0.5).astype(int)
@@ -16,6 +19,7 @@ def ambiguity_resolution(phi12_frac: np.ndarray, phi23_frac: np.ndarray, K: floa
     n23 = np.zeros(phi23_frac.shape, dtype=int)
     for i in range(len(phi12_frac)):
         n12[i] = np.round((phi23_frac[i]  - K * phi12_frac[i]) / (K - 1))
+        # TODO: 这里的条件可以按绝对值整合
         if phi43[i] > 0 and n12[i] < 0:
             n12[i] = np.round((phi23_frac[i]  - K * phi12_frac[i] + 1) / (K - 1))
             n23[i] = n12[i] + 1
@@ -53,25 +57,81 @@ def far_locate(t12_f, t23_f, c, K, d):  # FIXME: 还是模糊相位角?
     )
     return r_e, theta_e
 
-def time_delay_estimation(s1: np.ndarray, s2: np.ndarray, fs: float) -> float:
-    """基于互相关的时延估计
+def _time_delay_estimation_xcorr(x1: np.ndarray, x2: np.ndarray, f: float, fs: float) -> float:
+    """基于互相关的时延估计.
+    声源频率f暂时未用到
 
     Parameters
     ----------
     s1 : np.ndarray
-        信号序列1 (左侧)
+        信号1序列 (左侧)
     s2 : np.ndarray
-        信号序列2 (右侧)
+        信号2序列 (右侧)
+    f : int
+        声源频率 (Hz)
     fs : float
-        采样频率
+        信号采样频率 (Hz)
 
     Returns
     -------
     float
-        时延估计值
+        时延估计值tau (s)
     """
-    corr = signal.correlate(s1, s2)
-    # corr = corr / np.max(corr)
-    N = len(s1)  # 两个序列应当一样长所以用同一个长度
-    lags = signal.correlation_lags(N, N)
-    return lags[np.argmax(corr)] / fs
+    # TODO: 考虑加个带通滤波
+    corr = signal.correlate(x1, x2)
+    return signal.correlation_lags(len(x1), len(x2))[np.argmax(corr)] / fs
+
+def _time_delay_estimation_cpsd(x1: np.ndarray, x2: np.ndarray, f: float, fs: float) -> float:
+    """基于互功率谱的时延估计.
+    由于使用gcd寻找FFT最大可用频率采样步长, f与fs应为整数
+
+    Parameters
+    ----------
+    x1 : np.ndarray
+        信号1序列 (左侧)
+    x2 : np.ndarray
+        信号2序列 (右侧)
+    f : int
+        声源频率 (Hz)
+    fs : int
+        信号采样频率 (Hz)
+
+    Returns
+    -------
+    float
+        时延估计值tau (s)
+    """
+    f, fs = int(f), int(fs)
+    f_step = np.gcd(f, fs)
+    X1_f = np.fft.rfft(x1, fs // f_step)[f // f_step]
+    X2_f = np.fft.rfft(x2, fs // f_step)[f // f_step]
+    # 由于tau12 = tau1 - tau2, 这里需要负号
+    return -np.angle(X1_f * np.conj(X2_f)) / (2 * np.pi * f)  # type: ignore
+
+def time_delay_estimation(x1: np.ndarray, x2: np.ndarray, f: float, fs: float, method: Literal['cpsd', 'xcorr'] ='cpsd') -> float:
+    """时延估计算法
+    可选互相关法或互谱法
+
+    Parameters
+    ----------
+    x1 : np.ndarray
+        信号1序列 (左侧)
+    x2 : np.ndarray
+        信号2序列 (右侧)
+    f : float
+        声源频率 (Hz)
+    fs : float
+        信号采样频率 (Hz)
+    method : Literal['cpsd', 'xcorr'], optional
+        时延估计方法, by default 'cpsd'
+
+    Returns
+    -------
+    float
+        时延估计值tau (s)
+    """
+    methods = {
+        'cpsd': _time_delay_estimation_cpsd,
+        'xcorr': _time_delay_estimation_xcorr
+    }
+    return methods[method](x1, x2, f, fs)
