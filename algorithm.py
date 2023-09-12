@@ -42,15 +42,15 @@ def ambiguity_resolution(phi12_frac: float, phi23_frac: float, K: float, d: floa
     return n12 + phi12_frac, n23 + phi23_frac
 
 
-def far_locate(t12_f, t23_f, c, K, d):
+def far_locate(t12_e, t23_e, c, K, d):
     """远场条件下的位置解算
 
     Parameters
     ----------
-    t12_f : float
-        tau12模糊时延
-    t23_f : float
-        tau23模糊时延
+    t12_e : float
+        tau12估计时延
+    t23_e : float
+        tau23估计时延
 
     Returns
     -------
@@ -59,7 +59,6 @@ def far_locate(t12_f, t23_f, c, K, d):
     theta_e : float
         方位角估计值
     """
-    t12_e, t23_e = t12_f, t23_f  # TODO: 解模糊
     t13_e = t12_e + t23_e
     theta_e = np.arccos((c * t13_e) / ((K + 1) * d))
     r_e = (
