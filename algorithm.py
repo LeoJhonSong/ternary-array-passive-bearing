@@ -1,37 +1,48 @@
-from typing import Literal
+from typing import Literal, Tuple
 import numpy as np
 from scipy import signal
-from scipy.ndimage import gaussian_filter
 
 
-def ambiguity_resolution(phi12_frac: np.ndarray, phi23_frac: np.ndarray, K: float, d: float):
-    # TODO: 1. 缺少文档
-    # TODO: 2. 一次应该只需要输入一个值
+def ambiguity_resolution(phi12_frac: float, phi23_frac: float, K: float, d: float) -> Tuple[float, float]:
+    """基于虚拟基线法解相位模糊 (基于平行声源模型)
+
+    Parameters
+    ----------
+    phi12_frac : float
+        一个周期范围内的1, 2阵元信号相位差, (phi1 - phi2) / 2pi, 应在[-1/2, 1/2)
+    phi23_frac : float
+        一个周期范围内的2, 3阵元信号相位差, (phi2 - phi3) / 2pi, 应在[-1/2, 1/2)
+    K : float
+        2, 3阵元间基线长度/1, 2阵元间基线长度
+    d : float
+        1, 2阵元间基线长度 (m)
+
+    Returns
+    -------
+    Tuple[float, float]
+        _description_
+    """
+    # 确保在[-1/2, 1/2)范围内
+    phi12_frac, phi23_frac = np.mod(phi12_frac + 0.5, 1) - 0.5, np.mod(phi23_frac + 0.5, 1) - 0.5
     phi43 = phi23_frac - phi12_frac
     # 1. 修正phi43使-1/2 < phi_43 < 1/2
-    phi43 = phi43 - (phi43 > 0.5).astype(int) + (phi43 < -0.5).astype(int)
-    # 2. 由phi43正负修正phi12_frac, phi23_frac # FIXME: phi43=0?
-    sign43 = np.sign(phi43)
-    phi12_frac = phi12_frac + sign43 * (sign43 * np.sign(phi12_frac) == -1).astype(int)
-    phi23_frac = phi23_frac + sign43 * (sign43 * np.sign(phi23_frac) == -1).astype(int)
+    phi43 = phi43 - (phi43 > 0.5) + (phi43 < -0.5)
+    # 2. 由phi43正负修正phi12_frac, phi23_frac
+    sign43 = 2 * (phi43 >= 0) - 1
+    phi12_frac = phi12_frac + sign43 * (sign43 * np.sign(phi12_frac) == -1)
+    phi23_frac = phi23_frac + sign43 * (sign43 * np.sign(phi23_frac) == -1)
     # 3. 解得n12, n23
-    n12 = np.zeros(phi12_frac.shape, dtype=int)
-    n23 = np.zeros(phi23_frac.shape, dtype=int)
-    for i in range(len(phi12_frac)):
-        n12[i] = np.round((phi23_frac[i]  - K * phi12_frac[i]) / (K - 1))
-        # TODO: 这里的条件可以按绝对值整合
-        if phi43[i] > 0 and n12[i] < 0:
-            n12[i] = np.round((phi23_frac[i]  - K * phi12_frac[i] + 1) / (K - 1))
-            n23[i] = n12[i] + 1
-        elif phi43[i] < 0 and n12[i] > 0:
-            n12[i] = np.round((phi23_frac[i]  - K * phi12_frac[i] - 1) / (K - 1))
-            n23[i] = n12[i] - 1
-        else:
-            n23[i] = n12[i]
+    n12 = np.round((abs(phi23_frac) - K * abs(phi12_frac)) / (K - 1))
+    if n12 < 0:
+        n12 = np.round((abs(phi23_frac) - K * abs(phi12_frac) + 1) / (K - 1))
+        n23 = n12 + 1
+    else:
+        n23 = n12
+    n12, n23 = (2 * (phi43 >= 0) - 1) * n12, (2 * (phi43 >= 0) - 1) * n23
     return n12 + phi12_frac, n23 + phi23_frac
 
 
-def far_locate(t12_f, t23_f, c, K, d):  # FIXME: 还是模糊相位角?
+def far_locate(t12_f, t23_f, c, K, d):
     """远场条件下的位置解算
 
     Parameters
@@ -57,6 +68,7 @@ def far_locate(t12_f, t23_f, c, K, d):  # FIXME: 还是模糊相位角?
     )
     return r_e, theta_e
 
+
 def _time_delay_estimation_xcorr(x1: np.ndarray, x2: np.ndarray, f: float, fs: float) -> float:
     """基于互相关的时延估计.
     声源频率f暂时未用到
@@ -80,6 +92,7 @@ def _time_delay_estimation_xcorr(x1: np.ndarray, x2: np.ndarray, f: float, fs: f
     # TODO: 考虑加个带通滤波
     corr = signal.correlate(x1, x2)
     return signal.correlation_lags(len(x1), len(x2))[np.argmax(corr)] / fs
+
 
 def _time_delay_estimation_cpsd(x1: np.ndarray, x2: np.ndarray, f: float, fs: float) -> float:
     """基于互功率谱的时延估计.
@@ -108,7 +121,8 @@ def _time_delay_estimation_cpsd(x1: np.ndarray, x2: np.ndarray, f: float, fs: fl
     # 由于tau12 = tau1 - tau2, 这里需要负号
     return -np.angle(X1_f * np.conj(X2_f)) / (2 * np.pi * f)  # type: ignore
 
-def time_delay_estimation(x1: np.ndarray, x2: np.ndarray, f: float, fs: float, method: Literal['cpsd', 'xcorr'] ='cpsd') -> float:
+
+def time_delay_estimation(x1: np.ndarray, x2: np.ndarray, f: float, fs: float, method: Literal['cpsd', 'xcorr'] = 'xcorr') -> float:
     """时延估计算法
     可选互相关法或互谱法
 
