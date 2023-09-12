@@ -8,7 +8,7 @@ def interpolant(t):
 
 
 def generate_perlin_noise_2d(
-        shape, res, tileable=(False, False), interpolant=interpolant
+        shape, res, rnd_seed=0, tileable=(False, False), interpolant=interpolant
 ):
     """Generate a 2D numpy array of perlin noise.
 
@@ -36,6 +36,7 @@ def generate_perlin_noise_2d(
     >>> plt.imshow(noise, cmap='gray', interpolation='lanczos')
     >>> plt.colorbar()
     """
+    np.random.seed(rnd_seed)  # 确保每次随机种子一样
     delta = (res[0] / shape[0], res[1] / shape[1])
     d = (shape[0] // res[0], shape[1] // res[1])
     grid = np.mgrid[0:res[0]:delta[0], 0:res[1]:delta[1]]\

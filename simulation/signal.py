@@ -2,8 +2,9 @@ import numpy as np
 from .perlin import generate_perlin_noise_2d
 
 
-def sig_gen(c: float, f: float, r: float, fs: float, T: float) -> np.ndarray:
+def sig_gen(c: float, f: float, r: float, fs: float, T: float, weights: list, rnd_seed: int) -> np.ndarray:
     """生成距声源r处信号
+    # TODO: 参数要更新
 
     Parameters
     ----------
@@ -23,14 +24,20 @@ def sig_gen(c: float, f: float, r: float, fs: float, T: float) -> np.ndarray:
     list
         信号序列s[r, n]
     """
-    rng = np.random.default_rng()
+    # 设置随机数种子
+    rng = np.random.default_rng(rnd_seed)
 
-    np.random.seed(0)  # 确保每次随机种子一样
-    noise_template = generate_perlin_noise_2d((256, 256), (8, 8))
-    noise_template = np.interp(noise_template, [np.min(noise_template), np.max(noise_template)], [-1, 1])
-    # plt.imshow(noise_template, cmap='gray', interpolation='lanczos')
-    # plt.show()
-    noise = noise_template.flatten()
-    noise = np.tile(noise, 1 + int(T * fs / (len(noise))))[:int(T * fs)]
-    return 1 / r * (np.cos(2 * np.pi * f * (np.arange(0, T, 1 / fs) - r / c)) + 0.7 * noise + 0.6 * rng.standard_normal(int(T * fs)))  # TODO: 可选perlin噪声
-    # return 1 / r * (np.cos(2 * np.pi * f * (np.arange(0, T, 1 / fs) - r / c)) + 0.4 * rng.standard_normal(int(T * fs)))
+    perlin_noise = generate_perlin_noise_2d((256, 256), (8, 8), rnd_seed=rnd_seed).flatten()
+    perlin_noise = np.interp(perlin_noise, [np.min(perlin_noise), np.max(perlin_noise)], [-1, 1])
+    perlin_noise = np.tile(perlin_noise, 1 + int(T * fs / len(perlin_noise)))[:int(T * fs)]  # 重复拼接
+    noise_sources = np.vstack((
+        rng.standard_normal(int(T * fs)),
+        perlin_noise,
+    ))
+    src_noise = (np.array([weights]) @ noise_sources).flatten()
+    # TODO: 缺少自艇噪声
+    period = 1
+    T_on = 10e-3
+    t = np.arange(0, T, 1 / fs)
+    sig = np.cos(2 * np.pi * f * (t - r / c)) * ((t - r / c) % period < T_on)
+    return 1 / r * (sig + src_noise)
