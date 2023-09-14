@@ -1,6 +1,7 @@
 {
     "conventionalCommits.scopes": [
-        "算法框架"
+        "算法框架",
+        "算法细化"
     ],
     "cSpell.words": [
         "cmap",
