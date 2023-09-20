@@ -192,8 +192,8 @@ def time_delay_estimation(x1: np.ndarray, x2: np.ndarray, f: float, fs: float, m
     return methods[method](x1, x2, f, fs)
 
 
-def chirp_delay_estimation(x1: np.ndarray, x2: np.ndarray, fs: float, f: float, period: float, T_on: float, up_sample_scale: int) -> float:
-    """基于chirp信号的时延估计
+def cw_delay_estimation(x1: np.ndarray, x2: np.ndarray, fs: float, f: float, period: float, T_on: float, up_sample_scale: int) -> float:
+    """基于CW信号的时延估计
 
     Parameters
     ----------
@@ -204,11 +204,11 @@ def chirp_delay_estimation(x1: np.ndarray, x2: np.ndarray, fs: float, f: float, 
     fs : float
         信号采样频率 (Hz)
     f : float
-        chirp信号载波频率 (Hz)
+        CW信号载波频率 (Hz)
     period : float
         chirp信号周期 (s)
     T_on : float
-        chirp信号有效时长 (s)
+        CW信号有效时长 (s)
 
     Returns
     -------
