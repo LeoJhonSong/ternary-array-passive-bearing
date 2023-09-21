@@ -46,7 +46,7 @@ class Array_Signals:
         else:
             self.w = [np.random.default_rng(10000 * i * seed).standard_normal for i in range(1, 8)]
 
-    def set_params(self, add_w: float, add_perlin: float, gate: float, mag_w: float, phase_w: float)->None:
+    def set_params(self, add_w: float, add_perlin: float, cw_t: float, mag_w: float, phase_w: float) -> None:
         """设置各噪声系数
 
         Parameters
@@ -55,14 +55,14 @@ class Array_Signals:
             加性高斯白噪声系数
         add_perlin : float
             加性Perlin噪声系数
-        gate : float
+        cw_t : float
             CW信号周期增大系数
         mag_w : float
             乘性高斯白噪声系数
         phase_w : float
             相位高斯白噪声系数
         """
-        self.k = [add_w, add_perlin, gate, mag_w, phase_w]
+        self.k = [add_w, add_perlin, cw_t, mag_w, phase_w]
 
     def _source(self, t):
         return np.cos(2 * np.pi * self.f * t) * (t % (self.k[2] * self.T) < self.T_on)
@@ -71,14 +71,14 @@ class Array_Signals:
         perlin_noise = np.tile(self.perlin_series, 1 + int(t_len / len(self.perlin_series)))[:t_len]  # 重复拼接
         return self.k[0] * self.w[0](t_len) + self.k[1] * perlin_noise
 
-    def next(self, t: float | np.ndarray, velocity: np.ndarray) -> np.ndarray:
+    def next(self, t: float | np.ndarray, velocity: np.ndarray | Tuple[float, float]) -> np.ndarray:
         """获取下一组指定时刻信号
 
         Parameters
         ----------
         t : float | np.ndarray
             指定时间序列 (s)
-        velocity : np.ndarray
+        velocity : np.ndarray | Tuple[float, float]
             上一时刻线阵中心坐标下速度向量 (m/s, m/s)
 
         Returns
@@ -86,6 +86,7 @@ class Array_Signals:
         np.ndarray
             阵元1, 2, 3处数字信号序列
         """
+        velocity = np.array(velocity) if isinstance(velocity, tuple) else velocity
         t_len = 1 if isinstance(t, float) else len(t)
         r_t = self.r - np.matrix(velocity).T @ np.matrix(t - self.t_last)
         v_orth = np.matrix([[velocity[1]], [-velocity[0]]]) if not np.all(velocity == 0) else self.v_orth_last  # 顺时针旋转90度
@@ -97,4 +98,6 @@ class Array_Signals:
         x3 = (1 + self.k[3] * self.w[3](t_len)) / r3_t * (self._source(t - r3_t / self.c - self.k[4] * self.w[6](t_len)) + self._noise(t_len))
         self.t_last = t if isinstance(t, float) else t[-1]
         self.v_orth_last = velocity if not np.all(velocity == 0) else self.v_orth_last
+        self.r = r_t if isinstance(t, float) else r_t[:, -1]
+        # TODO: 加入对数值的量化按-5~+5V, 16位进行量化
         return np.array([x1, x2, x3])
