@@ -93,9 +93,9 @@ class Array_Signals:
         r1_t = np.linalg.norm(r_t - self.d[0] * v_orth, axis=0)
         r2_t = np.linalg.norm(r_t - self.d[1] * v_orth, axis=0)
         r3_t = np.linalg.norm(r_t - self.d[2] * v_orth, axis=0)
-        x1 = (1 + self.k[3] * self.w[1](t_len)) / r1_t * (self._source(t - r1_t / self.c - self.k[4] * self.w[4](t_len)) + self._noise(t_len))
-        x2 = (1 + self.k[3] * self.w[2](t_len)) / r2_t * (self._source(t - r2_t / self.c - self.k[4] * self.w[5](t_len)) + self._noise(t_len))
-        x3 = (1 + self.k[3] * self.w[3](t_len)) / r3_t * (self._source(t - r3_t / self.c - self.k[4] * self.w[6](t_len)) + self._noise(t_len))
+        x1 = (1 + r1_t**0.5 / 45 * self.k[3] * self.w[1](t_len)) / r1_t * (self._source(t - r1_t / self.c - r1_t**0.5 / 45 * self.k[4] * self.w[4](t_len)) + r1_t**0.5 / 45 * self._noise(t_len))
+        x2 = (1 + r2_t**0.5 / 45 * self.k[3] * self.w[2](t_len)) / r2_t * (self._source(t - r2_t / self.c - r2_t**0.5 / 45 * self.k[4] * self.w[5](t_len)) + r2_t**0.5 / 45 * self._noise(t_len))
+        x3 = (1 + r3_t**0.5 / 45 * self.k[3] * self.w[3](t_len)) / r3_t * (self._source(t - r3_t / self.c - r3_t**0.5 / 45 * self.k[4] * self.w[6](t_len)) + r3_t**0.5 / 45 * self._noise(t_len))
         self.t_last = t if isinstance(t, float) else t[-1]
         self.v_orth_last = velocity if not np.all(velocity == 0) else self.v_orth_last
         self.r = r_t if isinstance(t, float) else r_t[:, -1]
