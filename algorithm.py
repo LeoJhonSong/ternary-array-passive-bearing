@@ -61,7 +61,7 @@ def far_locate(t12: float, t23: float, c: float, K: float, d: float) -> Tuple[fl
     Returns
     -------
     Tuple[float, float]
-        r, theta. 距离估计值, 方位角估计值
+        r (m), theta (度). 距离估计值, 方位角估计值
     """
     t13 = t12 + t23
     theta = np.arccos((c * t13) / ((K + 1) * d))
@@ -69,7 +69,7 @@ def far_locate(t12: float, t23: float, c: float, K: float, d: float) -> Tuple[fl
         K * (K + 1) * ((d * np.sin(theta)) ** 2)
         / (2 * c * (K * t12 - t23))
     )
-    return r, theta
+    return r, np.rad2deg(theta)
 
 
 def near_locate(t12: float, t23: float, c: float, K: float, d: float) -> Tuple[float, float]:
