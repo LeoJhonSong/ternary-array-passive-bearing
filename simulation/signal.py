@@ -62,7 +62,7 @@ class Array_Signals:
         phase_w : float
             相位高斯白噪声系数
         """
-        self.k = [add_w, add_perlin, cw_t, mag_w, phase_w]
+        self.k = [add_w, add_perlin, 1 + cw_t, mag_w, phase_w]
 
     def _source(self, t):
         return np.cos(2 * np.pi * self.f * t) * (t % (self.k[2] * self.T) < self.T_on)

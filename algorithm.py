@@ -91,7 +91,7 @@ def near_locate(t12: float, t23: float, c: float, K: float, d: float) -> Tuple[f
     Returns
     -------
     Tuple[float, float]
-        r, theta (距离估计值, 方位角估计值).
+        r (m), theta (度). 距离估计值, 方位角估计值
     """
     theta2 = np.arccos(
         (c * d**2 * (K**2 * t12 + t23) - c**3 * t12 * t23 * (t12 + t23))
@@ -107,7 +107,7 @@ def near_locate(t12: float, t23: float, c: float, K: float, d: float) -> Tuple[f
         theta = theta2
     else:
         theta = np.arccos((r**2 + d2**2 - r2**2) / (2 * r * d2))
-    return r, theta
+    return r, np.rad2deg(theta)
 
 
 def _time_delay_estimation_xcorr(x1: np.ndarray, x2: np.ndarray, f: float, fs: float) -> float:
