@@ -14,3 +14,5 @@ passive bearing based on ternary sonar array
 - [plotly Python接口文档](https://plotly.com/python/)
 - [参考实现: dash-wind-streaming](https://dash.gallery/dash-wind-streaming/), [代码](https://github.com/plotly/dash-sample-apps/blob/main/apps/dash-wind-streaming/app.py)
 - [在Dash回调间共享数据](https://dash.plotly.com/sharing-data-between-callbacks)
+- [如何正确使用numba给Python加速？](https://www.zhihu.com/question/406931055)
+- [Parallel Programming with numpy and scipy](https://scipy.github.io/old-wiki/pages/ParallelProgramming)

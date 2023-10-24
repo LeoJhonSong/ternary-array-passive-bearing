@@ -130,7 +130,6 @@ def _time_delay_estimation_xcorr(x1: np.ndarray, x2: np.ndarray, f: float, fs: f
     float
         时延估计值tau (s)
     """
-    # TODO: 考虑加个带通滤波
     corr = signal.correlate(x1, x2, method='fft')
     return signal.correlation_lags(len(x1), len(x2))[np.argmax(corr)] / fs
 
