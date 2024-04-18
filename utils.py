@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 def deg_pol2cart(rho: float, angle: float) -> np.ndarray:
     theta = np.deg2rad(angle)
-    return rho * np.array([np.cos(theta), np.sin(theta)])
+    return (rho * np.array([np.cos(theta), np.sin(theta)])).astype(np.float32)
 
 
 def analysis(sig: 'Array_Signals', tau12_hat: float, tau23_hat: float, r_hat: float, angle_hat: float, vel_angle: float):
