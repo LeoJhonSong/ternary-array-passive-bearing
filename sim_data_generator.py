@@ -1,11 +1,17 @@
+import os
+import time
+import argparse
+
 import numpy as np
 from multiprocessing import Pool
 
-from entity import CW_Signal, Array_Signals, CW_Source, Three_Elements_Array
+from entity import CW_Func_Handler, Snapshot_Generator, CW_Source, Three_Elements_Array
 from utils import deg_pol2cart
 
+# TODO: 改为生成为多个flac文件，文件中写入采样率
 
-def sig_gen(fc: float, r: float, angle: float, sample_interval: int):
+
+def sig_gen(fc: float, r: float, angle: float | np.float32, sample_interval: int, d: float, K: float):
     """生成指定参数组合的信号片段
 
     Parameters
@@ -21,55 +27,86 @@ def sig_gen(fc: float, r: float, angle: float, sample_interval: int):
 
     Returns
     -------
-    (3, sample_interval * fc * 4)
-        _description_
+    snapshots : np.ndarray
+        shape of (3, sample_interval * fc * 4)
+    angle : float | np.float32
     """
-    target_sig = CW_Signal(
+    cw_func_handler = CW_Func_Handler(
         f=fc,  # 声源频率
         T=1,  # Cw信号周期
         T_on=10e-3,  # Cw信号脉宽
     )
-    sig = Array_Signals(
+    snapshot_generator = Snapshot_Generator(
         CW_Source(
-            signal=target_sig,
+            signal_func_callback=cw_func_handler,
             r=r,  # 声源距离
             angle=angle  # 声源角度
         ),
-        Three_Elements_Array(d=1, K=1),
+        Three_Elements_Array(d, K),
         c=1500  # 声速
     )
 
-    sample_interval = 5  # 采样时长
-    fs = int(target_sig.f * 4)  # 4倍频采样
+    fs = cw_func_handler.f * 4  # 4倍频采样
     vel_angle = 90
     speed = 0  # 先静止
     velocity = deg_pol2cart(speed, vel_angle)
 
     # sig.array.set_noise_params(0.01, 0.01, 0.01)
-    sig.set_ideal()
-    sig.init_rng(0)
+    snapshot_generator.set_ideal()
 
     t = np.arange(0, sample_interval, 1 / fs)
-    x = sig.next(t, velocity)
-    return x
+    snapshots = snapshot_generator(t, velocity)
+    return snapshots.astype(np.float32), angle
 
 
 def worker(angle):
-    return sig_gen(fc, r, angle, sample_interval)
+    return sig_gen(args.fc, args.r, angle, args.sample_interval, args.d, args.K)
 
 
 if __name__ == '__main__':
-    fc = 37500
-    r = 100
-    sample_interval = 5
+    # python sim_data_generator.py --path dataset/train dataset/val --N 1500 500 --sample_interval 2 --d 0.08 --K 2
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--fc', type=float, default=37500)
+    parser.add_argument('--r', type=float, default=100)
+    parser.add_argument('--d', type=float, default=1)
+    parser.add_argument('--K', type=float, default=1)
+    parser.add_argument('--sample_interval', type=int, default=1)
+    parser.add_argument('--path', nargs='*', type=str, default=['dataset/train'])
+    parser.add_argument('--N', nargs='*', type=int, default=[1500])
+    parser.add_argument('--left_limit', type=int, default=15)
+    parser.add_argument('--right_limit', type=int, default=165)
+    args = parser.parse_args()
+    assert len(args.path) == len(args.N), 'path和N的数量不一致'
 
-    start_angle = 15
-    end_angle = 165
+    for path, N in zip(args.path, args.N):
+        width = len(str(N))
 
-    x_arr = []
-    labels = np.array(np.arange(start_angle, end_angle + 1))
-    with Pool() as p:
-        x_arr = p.map(worker, labels)
+        if not os.path.exists(path):
+            os.makedirs(path)
 
-    array_signal = np.stack(x_arr, axis=2)
-    np.savez('sim_data.npz', array_signal=array_signal, labels=labels)
+        print(f'Generating {N} samples to {path}')
+
+        label_filename = np.array([])
+        labels = np.random.randint(args.left_limit, args.right_limit + 1, N).astype(np.float32)
+        with Pool() as p:
+            count = 0
+            for result in p.imap(worker, labels):
+                snapshots, label = result
+                count += 1
+                filename = str(time.time()).replace('.', '')
+
+                np.save(f'{path}/{filename}.npy', snapshots)
+                print(f'{count:{width}}: {filename}.npy with label {label}')
+
+                label = str(label)
+                if label_filename.size == 0:
+                    label_filename = np.array([[label, filename]])
+                else:
+                    label_filename = np.concatenate((label_filename, np.array([[label, filename]])))
+
+        # 如果labels.csv文件已存在，读取旧数据并与新数据拼接
+        if os.path.isfile(f'{path}/labels.csv'):
+            old_data = np.genfromtxt(f'{path}/labels.csv', delimiter=',', dtype='<U')
+            label_filename = np.concatenate((old_data, label_filename))
+
+        np.savetxt(f'{path}/labels.csv', label_filename, delimiter=',', fmt='%s')
