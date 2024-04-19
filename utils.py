@@ -4,15 +4,15 @@ import numpy as np
 import pandas as pd
 
 if TYPE_CHECKING:
-    from entity import Array_Signals
+    from entity import Snapshot_Generator
 
 
-def deg_pol2cart(rho: float, angle: float) -> np.ndarray:
+def deg_pol2cart(rho: float, angle: float | np.float32) -> np.ndarray:
     theta = np.deg2rad(angle)
     return (rho * np.array([np.cos(theta), np.sin(theta)])).astype(np.float32)
 
 
-def analysis(sig: 'Array_Signals', tau12_hat: float, tau23_hat: float, r_hat: float, angle_hat: float, vel_angle: float):
+def analysis(sig: 'Snapshot_Generator', tau12_hat: float, tau23_hat: float, r_hat: float, angle_hat: float, vel_angle: float):
     u_orth = np.expand_dims(deg_pol2cart(1, vel_angle - 90), axis=1)
     r_i = np.linalg.norm(
         np.expand_dims(sig.source.position, axis=1) - u_orth @ np.matrix(sig.array.d_i),
@@ -32,4 +32,3 @@ def analysis(sig: 'Array_Signals', tau12_hat: float, tau23_hat: float, r_hat: fl
         },
         index=['real', 'estimation', 'abs_error', 'rel_error']
     )
-

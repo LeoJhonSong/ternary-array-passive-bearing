@@ -8,7 +8,7 @@ from rng import Multithreaded_Standard_Normal, generate_perlin_noise_2d
 from utils import deg_pol2cart
 
 
-class CW_Signal:
+class CW_Func_Handler:
     def __init__(self, f: float, T: float, T_on: float) -> None:
         self.f = f
         self.T_on = T_on
@@ -20,21 +20,20 @@ class CW_Signal:
         # t为矩阵
         return np.cos(2 * np.float32(np.pi) * f * t) * (t % T < T_on)
 
-    def generate(self, t: np.ndarray):
+    def __call__(self, t: np.ndarray):
         # t为矩阵
         t = t.astype(np.float32)
         return self._generate(t, self.f, self.T, self.T_on).astype(np.float32)
 
 
 class CW_Source:
-    def __init__(self, signal: CW_Signal, r: float, angle: float) -> None:
-        self.signal = signal
+    def __init__(self, signal_func_callback: CW_Func_Handler, r: float, angle: float | np.float32, seed: int | None = None) -> None:
+        self.signal_func_callback = signal_func_callback
         self.r = r
         self.angle = angle
         self.position = deg_pol2cart(r, angle)
         self.set_noise_params()
-
-    def init_rng(self, seed: int | None = None) -> None:
+        # initial rng
         perlin_noise = generate_perlin_noise_2d((256, 256), (8, 8), seed=seed).flatten().astype(np.float32)
         self.perlin_series = np.interp(perlin_noise, [np.min(perlin_noise), np.max(perlin_noise)], [-1, 1])
         self.add_w = Multithreaded_Standard_Normal(seed=seed).generate
@@ -53,7 +52,7 @@ class CW_Source:
         """
         self.add_w_std = add_w_std
         self.add_perlin_mag = add_perlin_mag
-        self.signal.T = T_shift * self.signal.T
+        self.signal_func_callback.T = T_shift * self.signal_func_callback.T
 
     def _noise_gen(self, t: np.ndarray):
         t_len = t.shape[-1]
@@ -61,18 +60,17 @@ class CW_Source:
         return self.add_w_std * self.add_w(t_len) + self.add_perlin_mag * add_perlin
 
     def signal_gen(self, t: np.ndarray):
-        return self.signal.generate(t).astype(np.float32) + self._noise_gen(t).astype(np.float32)
+        return self.signal_func_callback(t).astype(np.float32) + self._noise_gen(t).astype(np.float32)
 
 
 class Three_Elements_Array:
-    def __init__(self, d: float, K: float) -> None:
+    def __init__(self, d: float, K: float, seed: int | None = None) -> None:
         self.K = K
         self.d = d
         d1, d2, d3 = -(K + 1) * d / 2, -(K - 1) * d / 2, (K + 1) * d / 2
         self.d_i = np.array([d1, d2, d3]).astype(np.float32)
         self.set_noise_params()
-
-    def init_rng(self, seed: int | None = None) -> None:
+        # initial rng
         self.add_w = Multithreaded_Standard_Normal(seed=seed).generate
 
     def set_noise_params(self, add_w0_std: float = 7e-3, add_w1_std: float = 7e-3, add_w2_std: float = 7e-3):
@@ -82,7 +80,7 @@ class Three_Elements_Array:
         return (self.add_w_std * self.add_w(t.shape)).astype(np.float32)
 
 
-class Array_Signals:
+class Snapshot_Generator:
     def __init__(self, source: CW_Source, array: Three_Elements_Array, c: float) -> None:
         """行进中三元线阵数字信号仿真数据
 
@@ -108,10 +106,6 @@ class Array_Signals:
         self.t_last = 0
         self.v_orth_last = np.array([1, 0])[:, np.newaxis]
 
-    def init_rng(self, seed: int | None = None):
-        self.source.init_rng(seed)
-        self.array.init_rng(seed)
-
     def set_ideal(self):
         self.source.set_noise_params(0, 0, 1)
         self.array.set_noise_params(0, 0, 0)
@@ -135,7 +129,7 @@ class Array_Signals:
         # TODO: 水声信道的乘性噪声/低通效应还是可以有?
         return 1 / r_i_t * source_signal + array_noise
 
-    def next(self, t: np.ndarray, velocity: np.ndarray | Tuple[float, float]) -> np.ndarray:
+    def __call__(self, t: np.ndarray, velocity: np.ndarray | Tuple[float, float]) -> np.ndarray:
         """获取下一组指定时刻信号
 
         Parameters
