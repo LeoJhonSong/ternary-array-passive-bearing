@@ -20,3 +20,5 @@ dash
 accelerate
 torchkeras
 torchmetrics
+
+soundfile

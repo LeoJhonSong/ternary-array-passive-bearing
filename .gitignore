@@ -2,3 +2,5 @@ __pycache__
 data/**/*.csv
 *.npz
 /dataset
+*.flac
+*.wav

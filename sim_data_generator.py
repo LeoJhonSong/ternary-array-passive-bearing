@@ -4,6 +4,7 @@ import argparse
 
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import soundfile as sf
 
 from entity import CW_Func_Handler, Snapshot_Generator, CW_Source, Three_Elements_Array
 from utils import deg_pol2cart
@@ -30,6 +31,7 @@ def sig_gen(fc: float, c: float, r: float, angle: float, d: float, K: float, fs_
     snapshots : np.ndarray
         shape of (3, sample_interval * fc * 4)
     angle : float
+    fs : int
     """
     cw_func_handler = CW_Func_Handler(
         f=fc,  # 声源频率
@@ -56,7 +58,7 @@ def sig_gen(fc: float, c: float, r: float, angle: float, d: float, K: float, fs_
 
     t = np.arange(0, sample_interval, 1 / fs)
     snapshots = snapshot_generator(t, velocity)
-    return snapshots.astype(np.float32), angle
+    return snapshots.astype(np.float32), angle, fs
 
 
 def worker(angle):
@@ -94,12 +96,12 @@ if __name__ == '__main__':
             count = 0
             futures = {executor.submit(worker, label) for label in labels}
             for future in as_completed(futures):
-                snapshots, label = future.result()
+                snapshots, label, fs = future.result()
                 count += 1
                 filename = str(time.time()).replace('.', '')
 
-                np.save(f'{path}/{filename}.npy', snapshots)
-                print(f'{count:{width}}: {filename}.npy with label {label}')
+                sf.write(f'{path}/{filename}.flac', snapshots.T, fs)  # soundfile要求形状为(samples, channels)
+                print(f'{count:{width}}: {filename}.flac with label {label}')
 
                 label = str(label)
                 if label_filename.size == 0:
