@@ -21,7 +21,7 @@ class Multithreaded_Standard_Normal:
         self.step = np.ceil(n / self.threads).astype(np.int_)
 
         def _fill(random_state, out, first, last):
-            random_state.standard_normal(out=out[first:last], dtype=np.float32)
+            random_state.standard_normal(out=out[first:last])
 
         futures = {}
         for i in range(self.threads):
@@ -32,7 +32,7 @@ class Multithreaded_Standard_Normal:
                     (i + 1) * self.step)
             futures[self.executor.submit(*args)] = i
         concurrent.futures.wait(futures)
-        return values.reshape(size)
+        return values.reshape(size).astype(np.float32)
 
     def __del__(self):
         self.executor.shutdown(False)

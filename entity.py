@@ -56,7 +56,10 @@ class CW_Source:
 
     def _noise_gen(self, t: np.ndarray):
         t_len = t.shape[-1]
-        add_perlin = np.tile(self.perlin_series, ceil(t_len / self.perlin_series.shape[-1]))[:t_len]  # 重复拼接
+        if t_len > self.perlin_series.shape[-1]:
+            add_perlin = np.tile(self.perlin_series, ceil(t_len / self.perlin_series.shape[-1]))[:t_len]  # 重复拼接
+        else:
+            add_perlin = self.perlin_series[:t_len]
         return self.add_w_std * self.add_w(t_len) + self.add_perlin_mag * add_perlin
 
     def signal_gen(self, t: np.ndarray):
