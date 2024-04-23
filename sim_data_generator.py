@@ -3,7 +3,7 @@ import time
 import argparse
 
 import numpy as np
-from multiprocessing import Pool
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from entity import CW_Func_Handler, Snapshot_Generator, CW_Source, Three_Elements_Array
 from utils import deg_pol2cart
@@ -11,7 +11,7 @@ from utils import deg_pol2cart
 # TODO: 改为生成为多个flac文件，文件中写入采样率
 
 
-def sig_gen(fc: float, r: float, angle: float | np.float32, sample_interval: int, d: float, K: float):
+def sig_gen(fc: float, c: float, r: float, angle: float | np.float32, d: float, K: float, fs_factor: int, sample_interval: int):
     """生成指定参数组合的信号片段
 
     Parameters
@@ -34,7 +34,7 @@ def sig_gen(fc: float, r: float, angle: float | np.float32, sample_interval: int
     cw_func_handler = CW_Func_Handler(
         f=fc,  # 声源频率
         T=1,  # Cw信号周期
-        T_on=10e-3,  # Cw信号脉宽
+        T_on=10e-2,  # Cw信号脉宽
     )
     snapshot_generator = Snapshot_Generator(
         CW_Source(
@@ -43,10 +43,10 @@ def sig_gen(fc: float, r: float, angle: float | np.float32, sample_interval: int
             angle=angle  # 声源角度
         ),
         Three_Elements_Array(d, K),
-        c=1500  # 声速
+        c=c  # 声速
     )
 
-    fs = cw_func_handler.f * 4  # 4倍频采样
+    fs = fs_factor * cw_func_handler.f
     vel_angle = 90
     speed = 0  # 先静止
     velocity = deg_pol2cart(speed, vel_angle)
@@ -60,19 +60,21 @@ def sig_gen(fc: float, r: float, angle: float | np.float32, sample_interval: int
 
 
 def worker(angle):
-    return sig_gen(args.fc, args.r, angle, args.sample_interval, args.d, args.K)
+    return sig_gen(args.fc, args.c, args.r, angle, args.d, args.K, args.fs_factor, args.sample_interval)
 
 
 if __name__ == '__main__':
     # python sim_data_generator.py --path dataset/train dataset/val --N 1500 500 --sample_interval 2 --d 0.08 --K 2
     parser = argparse.ArgumentParser()
     parser.add_argument('--fc', type=float, default=37500)
+    parser.add_argument('--c', type=float, default=1500)
     parser.add_argument('--r', type=float, default=100)
     parser.add_argument('--d', type=float, default=1)
     parser.add_argument('--K', type=float, default=1)
+    parser.add_argument('--fs_factor', type=int, default=4)
     parser.add_argument('--sample_interval', type=int, default=1)
-    parser.add_argument('--path', nargs='*', type=str, default=['dataset/train'])
-    parser.add_argument('--N', nargs='*', type=int, default=[1500])
+    parser.add_argument('--path', nargs='*', type=str, default=['dataset/train', 'dataset/val'])
+    parser.add_argument('--N', nargs='*', type=int, default=[1600, 400])
     parser.add_argument('--left_limit', type=int, default=15)
     parser.add_argument('--right_limit', type=int, default=165)
     args = parser.parse_args()
@@ -88,10 +90,11 @@ if __name__ == '__main__':
 
         label_filename = np.array([])
         labels = np.random.randint(args.left_limit, args.right_limit + 1, N).astype(np.float32)
-        with Pool() as p:
+        with ThreadPoolExecutor(max_workers=8) as executor:
             count = 0
-            for result in p.imap(worker, labels):
-                snapshots, label = result
+            futures = {executor.submit(worker, label) for label in labels}
+            for future in as_completed(futures):
+                snapshots, label = future.result()
                 count += 1
                 filename = str(time.time()).replace('.', '')
 
