@@ -7,6 +7,26 @@ passive bearing based on ternary sonar array
 2. 在python程序中收集采样后数据, 每1s数据解算一次
 3. TODO: 降采样后的数据以及每秒解算出的角度存至数据库
 
+## MARS
+
+### 树莓派作为网关组网
+
+- 电脑侧设置与`10,30,4,77`通信时通过**eth0**接口收发, 网关为`10.30.4.77`
+
+	```sh
+	sudo ip route add 10.30.4.77 via [树莓派eth0 ip] dev eth0
+	```
+
+- 树莓派侧**eth1**设置静态ip为`10.30.4.1`, 子网掩码`255.255.255.0`, 网关`10.30.4.1`, 开启ip转发
+
+	```sh
+	# 临时 (重启后失效)
+	sysctl -w net.ipv4.ip_forward=1
+	# 永久
+	sudo vi /etc/sysctl.conf # 取消net.ipv4.ip_forward=1的注释
+	sudo sysctl -p /etc/sysctl.conf
+	```
+
 ## 参考资料
 
 - [dash.dcc.Graph属性](https://dash.plotly.com/dash-core-components/graph#graph-properties)
