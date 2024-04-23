@@ -11,7 +11,7 @@ from utils import deg_pol2cart
 # TODO: 改为生成为多个flac文件，文件中写入采样率
 
 
-def sig_gen(fc: float, c: float, r: float, angle: float | np.float32, d: float, K: float, fs_factor: int, sample_interval: int):
+def sig_gen(fc: float, c: float, r: float, angle: float, d: float, K: float, fs_factor: int, sample_interval: int):
     """生成指定参数组合的信号片段
 
     Parameters
@@ -29,7 +29,7 @@ def sig_gen(fc: float, c: float, r: float, angle: float | np.float32, d: float, 
     -------
     snapshots : np.ndarray
         shape of (3, sample_interval * fc * 4)
-    angle : float | np.float32
+    angle : float
     """
     cw_func_handler = CW_Func_Handler(
         f=fc,  # 声源频率
@@ -89,7 +89,7 @@ if __name__ == '__main__':
         print(f'Generating {N} samples to {path}')
 
         label_filename = np.array([])
-        labels = np.random.randint(args.left_limit, args.right_limit + 1, N).astype(np.float32)
+        labels = np.random.randint(args.left_limit, args.right_limit + 1, N)
         with ThreadPoolExecutor(max_workers=8) as executor:
             count = 0
             futures = {executor.submit(worker, label) for label in labels}

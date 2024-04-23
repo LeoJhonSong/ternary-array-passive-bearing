@@ -18,23 +18,22 @@ class CW_Func_Handler:
     @jit(nopython=True, parallel=True)
     def _generate(t: np.ndarray, f: float, T: float, T_on: float):
         # t为矩阵
-        return np.cos(2 * np.float32(np.pi) * f * t) * (t % T < T_on)
+        return np.cos(2 * np.pi * f * t) * (t % T < T_on)
 
     def __call__(self, t: np.ndarray):
         # t为矩阵
-        t = t.astype(np.float32)
-        return self._generate(t, self.f, self.T, self.T_on).astype(np.float32)
+        return self._generate(t, self.f, self.T, self.T_on)
 
 
 class CW_Source:
-    def __init__(self, signal_func_callback: CW_Func_Handler, r: float, angle: float | np.float32, seed: int | None = None) -> None:
+    def __init__(self, signal_func_callback: CW_Func_Handler, r: float, angle: float, seed: int | None = None) -> None:
         self.signal_func_callback = signal_func_callback
         self.r = r
         self.angle = angle
         self.position = deg_pol2cart(r, angle)
         self.set_noise_params()
         # initial rng
-        perlin_noise = generate_perlin_noise_2d((256, 256), (8, 8), seed=seed).flatten().astype(np.float32)
+        perlin_noise = generate_perlin_noise_2d((256, 256), (8, 8), seed=seed).flatten()
         self.perlin_series = np.interp(perlin_noise, [np.min(perlin_noise), np.max(perlin_noise)], [-1, 1])
         self.add_w = Multithreaded_Standard_Normal(seed=seed).generate
 
@@ -63,7 +62,7 @@ class CW_Source:
         return self.add_w_std * self.add_w(t_len) + self.add_perlin_mag * add_perlin
 
     def signal_gen(self, t: np.ndarray):
-        return self.signal_func_callback(t).astype(np.float32) + self._noise_gen(t).astype(np.float32)
+        return self.signal_func_callback(t) + self._noise_gen(t)
 
 
 class Three_Elements_Array:
@@ -71,7 +70,7 @@ class Three_Elements_Array:
         self.K = K
         self.d = d
         d1, d2, d3 = -(K + 1) * d / 2, -(K - 1) * d / 2, (K + 1) * d / 2
-        self.d_i = np.array([d1, d2, d3]).astype(np.float32)
+        self.d_i = np.array([d1, d2, d3])
         self.set_noise_params()
         # initial rng
         self.add_w = Multithreaded_Standard_Normal(seed=seed).generate
@@ -80,7 +79,7 @@ class Three_Elements_Array:
         self.add_w_std = np.array([add_w0_std, add_w1_std, add_w2_std]).reshape(-1, 1)
 
     def noise_gen(self, t: np.ndarray):
-        return (self.add_w_std * self.add_w(t.shape)).astype(np.float32)
+        return (self.add_w_std * self.add_w(t.shape))
 
 
 class Snapshot_Generator:
@@ -105,7 +104,7 @@ class Snapshot_Generator:
         self.source = source
         self.array = array
         self.c = c
-        self.position = np.array(np.zeros(2)).astype(np.float32)
+        self.position = np.array(np.zeros(2))
         self.t_last = 0
         self.v_orth_last = np.array([1, 0])[:, np.newaxis]
 
@@ -147,15 +146,14 @@ class Snapshot_Generator:
         np.ndarray
             阵元1, 2, 3处数字信号序列
         """
-        t = t.astype(np.float32)
         velocity = np.array(velocity) if isinstance(velocity, tuple) else velocity
-        u_orth = (np.array([velocity[1], -velocity[0]])[:, np.newaxis] / np.linalg.norm(velocity)).astype(np.float32) if not np.all(velocity == 0) else self.v_orth_last  # 顺时针旋转90度的单位向量
+        u_orth = np.array([velocity[1], -velocity[0]])[:, np.newaxis] / np.linalg.norm(velocity) if not np.all(velocity == 0) else self.v_orth_last  # 顺时针旋转90度的单位向量
         r_i_t, self.position = self._next_rit(
             self.position,
             velocity,
             t - self.t_last,
             self.source.position,
-            u_orth.astype(np.float32) @ self.array.d_i[np.newaxis, :]  # shape: (2, 3)
+            u_orth @ self.array.d_i[np.newaxis, :]  # shape: (2, 3)
         )
         x_i_t = self._next_xit(
             r_i_t,
@@ -163,6 +161,6 @@ class Snapshot_Generator:
             self.array.noise_gen(t)
         )
         self.t_last = t[-1]
-        self.v_orth_last = u_orth.astype(np.float32)
+        self.v_orth_last = u_orth
         # TODO: 加入对数值的量化按-5~+5V, 16位进行量化
         return x_i_t

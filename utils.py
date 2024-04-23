@@ -7,9 +7,9 @@ if TYPE_CHECKING:
     from entity import Snapshot_Generator
 
 
-def deg_pol2cart(rho: float, angle: float | np.float32) -> np.ndarray:
+def deg_pol2cart(rho: float, angle: float) -> np.ndarray:
     theta = np.deg2rad(angle)
-    return (rho * np.array([np.cos(theta), np.sin(theta)])).astype(np.float32)
+    return rho * np.array([np.cos(theta), np.sin(theta)])
 
 
 def analysis(sig: 'Snapshot_Generator', tau12_hat: float, tau23_hat: float, r_hat: float, angle_hat: float, vel_angle: float):

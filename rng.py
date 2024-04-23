@@ -32,7 +32,7 @@ class Multithreaded_Standard_Normal:
                     (i + 1) * self.step)
             futures[self.executor.submit(*args)] = i
         concurrent.futures.wait(futures)
-        return values.reshape(size).astype(np.float32)
+        return values.reshape(size)
 
     def __del__(self):
         self.executor.shutdown(False)
@@ -72,7 +72,7 @@ def generate_perlin_noise_2d(
     grid = np.mgrid[0:res[0]:delta[0], 0:res[1]:delta[1]]\
              .transpose(1, 2, 0) % 1
     # Gradients
-    angles = 2 * np.float32(np.pi) * rng.random((res[0] + 1, res[1] + 1), dtype=np.float32)
+    angles = 2 * np.pi * rng.random((res[0] + 1, res[1] + 1))
     gradients = np.dstack((np.cos(angles), np.sin(angles)))
     if tileable[0]:
         gradients[-1, :] = gradients[0, :]
