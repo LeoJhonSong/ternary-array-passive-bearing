@@ -58,7 +58,7 @@ def sig_gen(fc: float, c: float, r: float, angle: float, d: float, K: float, fs_
 
     t = np.arange(0, sample_interval, 1 / fs)
     snapshots = snapshot_generator(t, velocity)
-    return snapshots.astype(np.float32), angle, fs
+    return snapshots.astype(np.float32), angle, int(fs)
 
 
 def worker(angle):
