@@ -4,7 +4,6 @@ import argparse
 
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import soundfile as sf
 
 from entity import CW_Func_Handler, Snapshot_Generator, CW_Source, Three_Elements_Array
 from utils import deg_pol2cart
@@ -12,7 +11,7 @@ from utils import deg_pol2cart
 # TODO: 改为生成为多个flac文件，文件中写入采样率
 
 
-def sig_gen(fc: float, c: float, r: float, angle: float, d: float, K: float, fs_factor: int, sample_interval: int):
+def sig_gen(fc: float, c: float, r: float, speed: float, angle: float, d: float, K: float, fs_factor: int, sample_interval: int):
     """生成指定参数组合的信号片段
 
     Parameters
@@ -28,10 +27,13 @@ def sig_gen(fc: float, c: float, r: float, angle: float, d: float, K: float, fs_
 
     Returns
     -------
-    snapshots : np.ndarray
-        shape of (3, sample_interval * fc * 4)
-    angle : float
+    snapshots_slices : np.ndarray
+        shape of (3, fc * fs_factor, sample_interval)
     fs : int
+    rs : np.ndarray
+        shape of (sample_interval,), 阵列坐标下每秒的声源距离
+    angles : np.ndarray
+        shape of (sample_interval,), 阵列坐标下每秒的声源方位角（度）
     """
     cw_func_handler = CW_Func_Handler(
         f=fc,  # 声源频率
@@ -50,19 +52,27 @@ def sig_gen(fc: float, c: float, r: float, angle: float, d: float, K: float, fs_
 
     fs = fs_factor * cw_func_handler.f
     vel_angle = 90
-    speed = 0  # 先静止
     velocity = deg_pol2cart(speed, vel_angle)
 
     # sig.array.set_noise_params(0.01, 0.01, 0.01)
     snapshot_generator.set_ideal()
 
-    t = np.arange(0, sample_interval, 1 / fs)
-    snapshots = snapshot_generator(t, velocity)
-    return snapshots.astype(np.float32), angle, int(fs)
+    t = np.arange(0, 1, 1 / fs)
+    snapshots, r_real, angle_real = snapshot_generator(t, velocity)
+    snapshots_slices = snapshots[:, :, np.newaxis]  # shape: (3, t_len, 1)
+    rs = np.array([r_real])
+    angles = np.array([angle_real])
+    for i in range(sample_interval - 1):
+        t = t + 1
+        snapshots, r_real, angle_real = snapshot_generator(t, velocity)
+        snapshots_slices = np.concatenate((snapshots_slices, snapshots[:, :, np.newaxis]), axis=-1)
+        rs = np.concatenate((rs, np.array([r_real])))
+        angles = np.concatenate((angles, np.array([angle_real])))
+    return snapshots_slices.astype(np.float32), int(fs), rs, angles
 
 
 def worker(angle):
-    return sig_gen(args.fc, args.c, args.r, angle, args.d, args.K, args.fs_factor, args.sample_interval)
+    return sig_gen(args.fc, args.c, args.r, args.speed, angle, args.d, args.K, args.fs_factor, args.sample_interval)
 
 
 if __name__ == '__main__':
@@ -71,6 +81,7 @@ if __name__ == '__main__':
     parser.add_argument('--fc', type=float, default=37500)
     parser.add_argument('--c', type=float, default=1500)
     parser.add_argument('--r', type=float, default=100)
+    parser.add_argument('--speed', type=float, default=0.5)
     parser.add_argument('--d', type=float, default=1)
     parser.add_argument('--K', type=float, default=1)
     parser.add_argument('--fs_factor', type=int, default=4)
@@ -91,27 +102,13 @@ if __name__ == '__main__':
         print(f'Generating {N} samples to {path}')
 
         label_filename = np.array([])
-        labels = np.random.randint(args.left_limit, args.right_limit + 1, N)
-        with ThreadPoolExecutor(max_workers=8) as executor:
+        source_init_angles = np.random.randint(args.left_limit, args.right_limit + 1, N)
+        with ThreadPoolExecutor(max_workers=4) as executor:
             count = 0
-            futures = {executor.submit(worker, label) for label in labels}
+            futures = {executor.submit(worker, angle) for angle in source_init_angles}
             for future in as_completed(futures):
-                snapshots, label, fs = future.result()
+                snapshots, fs, _, angles = future.result()
                 count += 1
                 filename = str(time.time()).replace('.', '')
-
-                sf.write(f'{path}/{filename}.flac', snapshots.T, fs)  # soundfile要求形状为(samples, channels)
-                print(f'{count:{width}}: {filename}.flac with label {label}')
-
-                label = str(label)
-                if label_filename.size == 0:
-                    label_filename = np.array([[label, filename]])
-                else:
-                    label_filename = np.concatenate((label_filename, np.array([[label, filename]])))
-
-        # 如果labels.csv文件已存在，读取旧数据并与新数据拼接
-        if os.path.isfile(f'{path}/labels.csv'):
-            old_data = np.genfromtxt(f'{path}/labels.csv', delimiter=',', dtype='<U')
-            label_filename = np.concatenate((old_data, label_filename))
-
-        np.savetxt(f'{path}/labels.csv', label_filename, delimiter=',', fmt='%s')
+                np.savez(f'{path}/{filename}.npz', snapshots=snapshots, fs=fs, angles=angles)
+                print(f'{count:{width}}: {path}/{filename}.npz')

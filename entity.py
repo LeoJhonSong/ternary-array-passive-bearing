@@ -71,6 +71,7 @@ class Three_Elements_Array:
         self.d = d
         d1, d2, d3 = -(K + 1) * d / 2, -(K - 1) * d / 2, (K + 1) * d / 2
         self.d_i = np.array([d1, d2, d3])
+        self.position = np.array(np.zeros(2))
         self.set_noise_params()
         # initial rng
         self.add_w = Multithreaded_Standard_Normal(seed=seed).generate
@@ -104,7 +105,6 @@ class Snapshot_Generator:
         self.source = source
         self.array = array
         self.c = c
-        self.position = np.array(np.zeros(2))
         self.t_last = 0
         self.v_orth_last = np.array([1, 0])[:, np.newaxis]
 
@@ -114,9 +114,9 @@ class Snapshot_Generator:
 
     @staticmethod
     @jit(nopython=True, parallel=True)
-    def _next_rit(self_position: np.ndarray, velocity: np.ndarray, delta_t: np.ndarray, source_position: np.ndarray, d_vec_i: np.ndarray):
-        self_position, velocity, delta_t = np.broadcast_arrays(self_position[:, np.newaxis], velocity[:, np.newaxis], delta_t[np.newaxis, :])  # shape: (2, t_len)
-        position_t = self_position + velocity * delta_t
+    def _next_rit(array_position: np.ndarray, velocity: np.ndarray, delta_t: np.ndarray, source_position: np.ndarray, d_vec_i: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        array_position, velocity, delta_t = np.broadcast_arrays(array_position[:, np.newaxis], velocity[:, np.newaxis], delta_t[np.newaxis, :])  # shape: (2, t_len)
+        position_t = array_position + velocity * delta_t
         source_position, position_t_expanded, d_vec_i = np.broadcast_arrays(
             source_position[:, np.newaxis, np.newaxis],  # shape: (2, 1, 1)
             position_t[:, np.newaxis, :],  # shape: (2, 1, t_len)
@@ -131,7 +131,7 @@ class Snapshot_Generator:
         # TODO: 水声信道的乘性噪声/低通效应还是可以有?
         return 1 / r_i_t * source_signal + array_noise
 
-    def __call__(self, t: np.ndarray, velocity: np.ndarray | Tuple[float, float]) -> np.ndarray:
+    def __call__(self, t: np.ndarray, velocity: np.ndarray | Tuple[float, float]) -> Tuple[np.ndarray, float, float]:
         """获取下一组指定时刻信号
 
         Parameters
@@ -144,12 +144,15 @@ class Snapshot_Generator:
         Returns
         -------
         np.ndarray
-            阵元1, 2, 3处数字信号序列
+            shape: (3, t_len), 阵元1, 2, 3处数字信号序列
         """
         velocity = np.array(velocity) if isinstance(velocity, tuple) else velocity
         u_orth = np.array([velocity[1], -velocity[0]])[:, np.newaxis] / np.linalg.norm(velocity) if not np.all(velocity == 0) else self.v_orth_last  # 顺时针旋转90度的单位向量
-        r_i_t, self.position = self._next_rit(
-            self.position,
+        array2source = self.source.position - self.array.position  # shape: (2,), vector point to source from array center
+        r_real = float(np.linalg.norm(array2source))
+        angle_real = np.rad2deg(np.arccos(np.dot(array2source, u_orth) / (np.linalg.norm(array2source) * np.linalg.norm(u_orth))))
+        r_i_t, self.array.position = self._next_rit(
+            self.array.position,
             velocity,
             t - self.t_last,
             self.source.position,
@@ -163,4 +166,4 @@ class Snapshot_Generator:
         self.t_last = t[-1]
         self.v_orth_last = u_orth
         # TODO: 加入对数值的量化按-5~+5V, 16位进行量化
-        return x_i_t
+        return x_i_t, r_real, angle_real
