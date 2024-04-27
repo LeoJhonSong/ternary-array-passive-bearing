@@ -11,7 +11,7 @@ passive bearing based on ternary sonar array
 
 ### 树莓派作为网关组网
 
-- 电脑侧设置与`10,30,4,77`通信时通过**eth0**接口收发, 网关为`10.30.4.77`
+- 电脑侧设置与`10.30.4.77`通信时通过**eth0**接口收发, 网关为`10.30.4.77`
 
 	```sh
 	sudo ip route add 10.30.4.77 via [树莓派eth0 ip] dev eth0
@@ -26,6 +26,17 @@ passive bearing based on ternary sonar array
 	sudo vi /etc/sysctl.conf # 取消net.ipv4.ip_forward=1的注释
 	sudo sysctl -p /etc/sysctl.conf
 	```
+
+#### 路由配置命令备忘
+
+```bash
+# 查看当前路由
+ip route
+# 删除指定路由
+sudo ip route del default via <gateway_ip> dev <interface>
+# 添加路由并设置优先级 (数值越小优先级越高)
+sudo ip route add default via <gateway_ip> dev <interface> metric <new_metric>
+```
 
 ## 参考资料
 
