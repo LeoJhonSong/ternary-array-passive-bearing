@@ -70,6 +70,7 @@ class Three_Elements_Array:
         self.K = K
         self.d = d
         d1, d2, d3 = -(K + 1) * d / 2, -(K - 1) * d / 2, (K + 1) * d / 2
+        self.dist_max = self.d * (self.K + 1)  # 最大阵元间距
         self.d_i = np.array([d1, d2, d3])
         self.position = np.array(np.zeros(2))
         self.set_noise_params()
@@ -107,6 +108,9 @@ class Snapshot_Generator:
         self.c = c
         self.t_last = 0
         self.v_orth_last = np.array([1, 0])[:, np.newaxis]
+
+    def maxlag(self, fs: float) -> int:
+        return int(np.ceil(self.array.dist_max / self.c * fs))  # 采样频率下最大滞后量, 即最大时延对应的采样点数
 
     def set_ideal(self):
         self.source.set_noise_params(0, 0, 1)

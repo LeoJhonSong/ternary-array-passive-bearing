@@ -13,6 +13,7 @@
         "interp",
         "interpolant",
         "lanczos",
+        "maxlag",
         "perlin",
         "plotly",
         "radialaxis",
