@@ -1,9 +1,10 @@
 import os
 import time
 import argparse
+import queue
+import concurrent
 
 import numpy as np
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from entity import CW_Func_Handler, Snapshot_Generator, CW_Source, Three_Elements_Array
 from utils import deg_pol2cart
@@ -59,15 +60,15 @@ def sig_gen(fc: float, c: float, r: float, speed: float, angle: float, d: float,
 
     t = np.arange(0, 1, 1 / fs)
     snapshots, r_real, angle_real = snapshot_generator(t, velocity)
-    snapshots_slices = snapshots[:, :, np.newaxis]  # shape: (3, t_len, 1)
-    rs = np.array([r_real])
-    angles = np.array([angle_real])
-    for i in range(sample_interval - 1):
+    snapshots_slices = np.zeros((3, len(t), sample_interval))  # shape: (3, t_len, sample_interval)
+    rs = np.zeros((sample_interval, 1))
+    angles = np.zeros((sample_interval, 1))
+    for i in range(sample_interval):
         t = t + 1
         snapshots, r_real, angle_real = snapshot_generator(t, velocity)
-        snapshots_slices = np.concatenate((snapshots_slices, snapshots[:, :, np.newaxis]), axis=-1)
-        rs = np.concatenate((rs, np.array([r_real])))
-        angles = np.concatenate((angles, np.array([angle_real])))
+        snapshots_slices[:, :, i] = snapshots
+        rs[i] = r_real
+        angles[i] = angle_real
     return snapshots_slices.astype(np.float32), int(fs), rs, angles
 
 
@@ -103,12 +104,31 @@ if __name__ == '__main__':
 
         label_filename = np.array([])
         source_init_angles = np.random.randint(args.left_limit, args.right_limit + 1, N)
-        with ThreadPoolExecutor(max_workers=4) as executor:
+        # 创建线程池和队列
+        compute_executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
+        io_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        q = queue.Queue()
+
+        # 提交计算任务
+        for angle in source_init_angles:
+            future = compute_executor.submit(worker, angle)
+            future.add_done_callback(lambda future: q.put(future.result()))
+
+        # 提交I/O任务
+        def save_result():
             count = 0
-            futures = {executor.submit(worker, angle) for angle in source_init_angles}
-            for future in as_completed(futures):
-                snapshots, fs, _, angles = future.result()
+            while True:
+                result = q.get()
+                if result is None:
+                    break
                 count += 1
                 filename = str(time.time()).replace('.', '')
-                np.savez(f'{path}/{filename}.npz', snapshots=snapshots, fs=fs, angles=angles)
+                np.savez_compressed(f'{path}/{filename}.npz', snapshots=result[0], fs=result[1], angles=result[2])
                 print(f'{count:{width}}: {path}/{filename}.npz')
+
+        io_executor.submit(save_result)
+
+        # 等待所有任务完成
+        compute_executor.shutdown()
+        q.put(None)
+        io_executor.shutdown()
