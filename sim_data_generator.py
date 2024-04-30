@@ -1,8 +1,7 @@
 import os
 import time
 import argparse
-import queue
-import concurrent
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 
@@ -104,31 +103,22 @@ if __name__ == '__main__':
 
         label_filename = np.array([])
         source_init_angles = np.random.randint(args.left_limit, args.right_limit + 1, N)
-        # 创建线程池和队列
-        compute_executor = concurrent.futures.ThreadPoolExecutor(max_workers=8)
-        io_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-        q = queue.Queue()
-
-        # 提交计算任务
-        for angle in source_init_angles:
-            future = compute_executor.submit(worker, angle)
-            future.add_done_callback(lambda future: q.put(future.result()))
-
-        # 提交I/O任务
-        def save_result():
+        with ThreadPoolExecutor(max_workers=12) as executor:
             count = 0
-            while True:
-                result = q.get()
-                if result is None:
-                    break
-                count += 1
-                filename = str(time.time()).replace('.', '')
-                np.savez_compressed(f'{path}/{filename}.npz', snapshots=result[0], fs=result[1], angles=result[2])
-                print(f'{count:{width}}: {path}/{filename}.npz')
-
-        io_executor.submit(save_result)
-
-        # 等待所有任务完成
-        compute_executor.shutdown()
-        q.put(None)
-        io_executor.shutdown()
+            jobs = {}
+            jobs_left = len(source_init_angles)
+            jobs_iter = iter(source_init_angles)
+            while jobs_left:
+                for angle in jobs_iter:
+                    job = executor.submit(worker, angle)
+                    jobs[job] = angle
+                    if len(jobs) > 300:  # 限制同时进行的任务数量, 否则会消耗过量内存
+                        break
+                for job in as_completed(jobs):
+                    jobs_left -= 1
+                    snapshots, fs, _, angles = job.result()
+                    del jobs[job]  # 强制回收内存
+                    count += 1
+                    filename = str(time.time()).replace('.', '')
+                    np.savez(f'{path}/{filename}.npz', snapshots=snapshots, fs=fs, angles=angles)
+                    print(f'{count:{width}}: {path}/{filename}.npz')
