@@ -78,7 +78,7 @@ def worker(angle):
 if __name__ == '__main__':
     # python sim_data_generator.py --path dataset/train dataset/val --N 1500 500 --sample_interval 2 --d 0.08 --K 2
     parser = argparse.ArgumentParser()
-    parser.add_argument('--fc', type=float, default=37500)
+    parser.add_argument('--fc', type=int, default=37500)
     parser.add_argument('--c', type=float, default=1500)
     parser.add_argument('--r', type=float, default=100)
     parser.add_argument('--speed', type=float, default=0.5)
@@ -86,14 +86,15 @@ if __name__ == '__main__':
     parser.add_argument('--K', type=float, default=1)
     parser.add_argument('--fs_factor', type=int, default=4)
     parser.add_argument('--sample_interval', type=int, default=1)
-    parser.add_argument('--path', nargs='*', type=str, default=['dataset/train', 'dataset/val'])
+    parser.add_argument('--path', type=str, default='dataset')
     parser.add_argument('--N', nargs='*', type=int, default=[1600, 400])
     parser.add_argument('--left_limit', type=int, default=15)
     parser.add_argument('--right_limit', type=int, default=165)
     args = parser.parse_args()
-    assert len(args.path) == len(args.N), 'path和N的数量不一致'
 
-    for path, N in zip(args.path, args.N):
+    paths = [f'{args.path}/fc_{args.fc}-fs_factor_{args.fs_factor}-d_{args.d}-K_{args.K}/{item}' for item in ['train', 'val']]
+
+    for path, N in zip(paths, args.N):
         width = len(str(N))
 
         if not os.path.exists(path):
