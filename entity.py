@@ -81,7 +81,7 @@ class Three_Elements_Array:
         self.add_w_std = np.array([add_w0_std, add_w1_std, add_w2_std]).reshape(-1, 1)
 
     def noise_gen(self, t: np.ndarray):
-        return (self.add_w_std * self.add_w(t.shape))
+        return (self.add_w_std * self.add_w((len(self.add_w_std), len(t))))
 
 
 class Snapshot_Generator:

@@ -59,11 +59,6 @@ def tf_plot(x: np.ndarray, fs: float, t: np.ndarray | None = None, f_max: float 
         _description_, by default (40, 20)
     fontsize : int, optional
         _description_, by default 32
-
-    Returns
-    -------
-    _type_
-        _description_
     """
     # TODO: 先高通滤波再汉明窗: http://mirlab.org/jang/books/audiosignalprocessing/speechFeatureMfcc_chinese.asp?title=122%25
     plt.rcParams['xtick.labelsize'] = fontsize
