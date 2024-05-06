@@ -2,8 +2,9 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
+from scipy import signal
 import matplotlib.pyplot as plt
-from matplotlib.ticker import FuncFormatter, MultipleLocator
+from matplotlib import gridspec
 
 if TYPE_CHECKING:
     from entity import Snapshot_Generator
@@ -36,7 +37,30 @@ def analysis(sig: 'Snapshot_Generator', tau12_hat: float, tau23_hat: float, r_ha
     )
 
 
-def tf_plot(x: np.ndarray, fs: float, t: np.ndarray | None = None, f_max: float = 80000, NFFT=8192, noverlap_scale: float = 0.5, f_tick_step: float = 1e4, figsize=(40, 20), fontsize: int = 32):
+def rfft_plot(x: np.ndarray, fs: float, fc: float | None = None, bandwidth: float | None = None):
+    """绘制RFFT频谱图"""
+    X = np.abs(np.fft.rfft(x))
+    f = np.fft.rfftfreq(x.shape[1], 1 / fs)
+    channels = x.shape[0]
+    fig, axs = plt.subplots(nrows=channels, sharex=True)
+    Xmax = np.max(X)
+    if fc is not None and bandwidth is not None:
+        fmin, fmax = fc - bandwidth / 2, fc + bandwidth / 2
+        Xmax = np.max(X[:, (f < fmax) & (fmin < f)])
+        Xmin = np.min(X[:, (f < fmax) & (fmin < f)])
+    for c in range(channels):
+        axs[c].plot(f, X[c])
+        if fc is not None:
+            axs[c].set_xlim((fmin, fmax))
+            axs[c].set_ylim((Xmin, Xmax))
+        else:
+            axs[c].set_ylim(top=Xmax)
+    plt.subplots_adjust(hspace=0, wspace=0)
+    plt.xlabel('Frequency (Hz)')
+    plt.show()
+
+
+def tf_plot(x: np.ndarray, fs: float, fmax: float = 80e3, NFFT=256, noverlap_scale: float = 0.5):
     """绘制时域波形和短时傅里叶变换时频图
 
     Parameters
@@ -61,32 +85,31 @@ def tf_plot(x: np.ndarray, fs: float, t: np.ndarray | None = None, f_max: float 
         _description_, by default 32
     """
     # TODO: 先高通滤波再汉明窗: http://mirlab.org/jang/books/audiosignalprocessing/speechFeatureMfcc_chinese.asp?title=122%25
-    plt.rcParams['xtick.labelsize'] = fontsize
-    plt.rcParams['ytick.labelsize'] = fontsize
+    if x.ndim == 1:
+        x = x.reshape(1, -1)
+    f, t_seg, Zxx = signal.stft(x, fs)
+    Zxx = np.abs(Zxx[:, f < fmax, :])
+    f = f[f < fmax] / 1e3
+    t = np.arange(x.shape[1]) / fs
+    channels = x.shape[0]
+    xmin, xmax = float(np.min(x)), float(np.max(x))
 
-    def hz_to_khz(x, pos):
-        'The two args are the value and tick position'
-        return '%1.0f' % (x * 1e-3)
-    if t is None:
-        t = np.arange(x.shape[0]) / fs
-    fig, (ax1, ax2) = plt.subplots(nrows=2, sharex=True, figsize=figsize)
-    ax1.plot(t, x)
-    ax1.set_ylabel('Signal', fontsize=fontsize)
-    Pxx, freqs, bins, im = ax2.specgram(x, NFFT=NFFT, noverlap=int(noverlap_scale * NFFT), Fs=fs, cmap='gnuplot')
-    # The `specgram` method returns 4 objects. They are:
-    # - Pxx: the periodogram
-    # - freqs: the frequency vector
-    # - bins: the centers of the time bins
-    # - im: the .image.AxesImage instance representing the data in the plot
-    ax2.set_xlim(0, t[-1])
-    ax2.set_ylim(0, f_max)
-    ax2.set_xticks(np.arange(0, t[-1] + 1, 1))
-    ax2.yaxis.set_major_formatter(FuncFormatter(hz_to_khz))  # Change y-axis label format
-    ax2.set_yticks(np.arange(0, f_max, f_tick_step))
-    ax2.yaxis.set_minor_locator(MultipleLocator(f_tick_step / 2))
-    ax2.set_xlabel('Time (s)', fontsize=fontsize)
-    ax2.set_ylabel('Frequency (kHz)', fontsize=fontsize)
+    plt.figure(figsize=(10, 3 * channels))
+    gs = gridspec.GridSpec(2 * channels, 1, height_ratios=[1, 2] * channels)
 
-    print(len(freqs))
+    for c in range(channels):
+        ax1 = plt.subplot(gs[2 * c])
+        ax1.plot(t, x[c])
+        ax1.set_xlim((t[0], t[-1]))
+        ax1.set_ylim((xmin, xmax))
+        ax1.set_xticklabels([])
+        ax1.set_ylabel('Signal')
+        ax2 = plt.subplot(gs[2 * c + 1])
+        ax2.pcolormesh(t_seg, f, Zxx[c], shading='gouraud', cmap='gnuplot')
+        ax2.set_ylabel('Frequency (kHz)')
+        if c != channels - 1:
+            ax2.set_xticklabels([])
+            ax2.set_xlabel('Time (s)')
 
+    plt.subplots_adjust(hspace=0, wspace=0)
     plt.show()
