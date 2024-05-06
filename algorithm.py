@@ -205,7 +205,7 @@ def cw_delay_estimation(x1: np.ndarray, x2: np.ndarray, fs: float, f: float, per
     f : float
         CW信号载波频率 (Hz)
     period : float
-        chirp信号周期 (s)
+        CW信号周期 (s)
     T_on : float
         CW信号有效时长 (s)
 

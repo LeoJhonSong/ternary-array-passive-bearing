@@ -39,24 +39,30 @@ def analysis(sig: 'Snapshot_Generator', tau12_hat: float, tau23_hat: float, r_ha
 
 def rfft_plot(x: np.ndarray, fs: float, fc: float | None = None, bandwidth: float | None = None):
     """绘制RFFT频谱图"""
+    if x.ndim == 1:
+        x = x.reshape(1, -1)
     X = np.abs(np.fft.rfft(x))
     f = np.fft.rfftfreq(x.shape[1], 1 / fs)
     channels = x.shape[0]
     fig, axs = plt.subplots(nrows=channels, sharex=True)
+    if channels == 1:
+        axs = [axs]
     Xmax = np.max(X)
     if fc is not None and bandwidth is not None:
+        f = f / 1e3
+        fc, bandwidth = fc / 1e3, bandwidth / 1e3
         fmin, fmax = fc - bandwidth / 2, fc + bandwidth / 2
         Xmax = np.max(X[:, (f < fmax) & (fmin < f)])
         Xmin = np.min(X[:, (f < fmax) & (fmin < f)])
     for c in range(channels):
         axs[c].plot(f, X[c])
-        if fc is not None:
+        if fc is not None and bandwidth is not None:
             axs[c].set_xlim((fmin, fmax))
             axs[c].set_ylim((Xmin, Xmax))
         else:
             axs[c].set_ylim(top=Xmax)
     plt.subplots_adjust(hspace=0, wspace=0)
-    plt.xlabel('Frequency (Hz)')
+    plt.xlabel('Frequency (kHz)')
     plt.show()
 
 
