@@ -37,7 +37,7 @@ class CW_Source:
         self.perlin_series = np.interp(perlin_noise, [np.min(perlin_noise), np.max(perlin_noise)], [-1, 1])
         self.add_w = Multithreaded_Standard_Normal(seed=seed).generate
 
-    def set_noise_params(self, add_w_std: float = 0.3, add_perlin_mag: float = 0.5, T_shift: float = 1):
+    def set_noise_params(self, add_w_std: float = 1e-9, add_perlin_mag: float = 0.5, T_shift: float = 1):
         """设置各噪声系数
 
         Parameters
@@ -115,6 +115,10 @@ class Snapshot_Generator:
     def set_ideal(self):
         self.source.set_noise_params(0, 0, 1)
         self.array.set_noise_params(0, 0, 0)
+
+    def set_SNR(self, SNR_dB):
+        deviation = (10 ** (SNR_dB / -20)) / self.source.r
+        self.array.set_noise_params(deviation, deviation, deviation)
 
     @staticmethod
     @jit(nopython=True, parallel=True)
