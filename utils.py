@@ -111,7 +111,7 @@ def tf_plot(x: np.ndarray, fs: float, fmax: float = 80e3, NFFT=256, noverlap_sca
         ax1.set_xticklabels([])
         ax1.set_ylabel('Signal')
         ax2 = plt.subplot(gs[2 * c + 1])
-        ax2.pcolormesh(t_seg, f, Zxx[c], shading='gouraud', cmap='gnuplot')
+        ax2.pcolormesh(t_seg, f, np.abs(Zxx[c]), shading='gouraud', cmap='gnuplot')
         ax2.set_ylabel('Frequency (kHz)')
         if c != channels - 1:
             ax2.set_xticklabels([])
