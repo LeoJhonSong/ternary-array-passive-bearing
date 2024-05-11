@@ -11,7 +11,7 @@ from utils import deg_pol2cart
 # TODO: 改为生成为多个flac文件，文件中写入采样率
 
 
-def sig_gen(fc: float, c: float, r: float, speed: float, angle: float, d: float, K: float, fs_factor: int, sample_interval: int):
+def sig_gen(fc: float, c: float, r: float, speed: float, angle: float, d: float, K: float, SNR_dB: float, fs_factor: int, sample_interval: int):
     """生成指定参数组合的信号片段
 
     Parameters
@@ -49,6 +49,7 @@ def sig_gen(fc: float, c: float, r: float, speed: float, angle: float, d: float,
         Three_Elements_Array(d, K),
         c=c  # 声速
     )
+    array_data_sampler.set_SNR(SNR_dB)
 
     fs = fs_factor * cw_func_handler.f
     vel_angle = 90
@@ -83,6 +84,7 @@ if __name__ == '__main__':
     parser.add_argument('--speed', type=float, default=0.5)
     parser.add_argument('--d', type=float, default=1)
     parser.add_argument('--K', type=float, default=1)
+    parser.add_argument('--SNR', type=float, default=0)
     parser.add_argument('--fs_factor', type=int, default=4)
     parser.add_argument('--sample_interval', type=int, default=1)
     parser.add_argument('--path', type=str, default='dataset')
@@ -91,7 +93,7 @@ if __name__ == '__main__':
     parser.add_argument('--right_limit', type=int, default=165)
     args = parser.parse_args()
 
-    paths = [f'{args.path}/fc_{args.fc}-fs_factor_{args.fs_factor}-d_{args.d}-K_{args.K}/{item}' for item in ['train', 'val']]
+    paths = [f'{args.path}/fc_{args.fc}-fs_factor_{args.fs_factor}-d_{args.d}-K_{args.K}-SNR_{args.SNR}/{item}' for item in ['train', 'val']]
 
     for path, N in zip(paths, args.N):
         width = len(str(N))
