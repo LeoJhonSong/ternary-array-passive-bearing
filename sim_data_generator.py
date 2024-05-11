@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 
-from entity import CW_Func_Handler, Snapshot_Generator, CW_Source, Three_Elements_Array
+from entity import CW_Func_Handler, Array_Data_Sampler, CW_Source, Three_Elements_Array
 from utils import deg_pol2cart
 
 # TODO: 改为生成为多个flac文件，文件中写入采样率
@@ -37,10 +37,10 @@ def sig_gen(fc: float, c: float, r: float, speed: float, angle: float, d: float,
     """
     cw_func_handler = CW_Func_Handler(
         f=fc,  # 声源频率
-        T=1,  # Cw信号周期
-        T_on=10e-2,  # Cw信号脉宽
+        prf=1,  # Cw脉冲重复频率
+        pulse_width=10e-3,  # Cw信号脉宽
     )
-    snapshot_generator = Snapshot_Generator(
+    array_data_sampler = Array_Data_Sampler(
         CW_Source(
             signal_func_callback=cw_func_handler,
             r=r,  # 声源距离
@@ -54,25 +54,24 @@ def sig_gen(fc: float, c: float, r: float, speed: float, angle: float, d: float,
     vel_angle = 90
     velocity = deg_pol2cart(speed, vel_angle)
 
-    # sig.array.set_noise_params(0.01, 0.01, 0.01)
-    snapshot_generator.set_ideal()
+    array_data_sampler.set_ideal()
 
     t = np.arange(0, 1, 1 / fs)
-    snapshots, r_real, angle_real = snapshot_generator(t, velocity)
-    snapshots_slices = np.zeros((3, len(t), sample_interval))  # shape: (3, t_len, sample_interval)
+    data, r_real, angle_real = array_data_sampler(t, velocity)
+    data_slices = np.zeros((3, len(t), sample_interval))  # shape: (3, t_len, sample_interval)
     rs = np.zeros((sample_interval, 1))
     angles = np.zeros((sample_interval, 1))
     for i in range(sample_interval):
         t = t + 1
-        snapshots, r_real, angle_real = snapshot_generator(t, velocity)
-        snapshots_slices[:, :, i] = snapshots
+        data, r_real, angle_real = array_data_sampler(t, velocity)
+        data_slices[:, :, i] = data
         rs[i] = r_real
         angles[i] = angle_real
-    return snapshots_slices.astype(np.float32), int(fs), rs, angles
+    return data_slices.astype(np.float32), int(fs), rs, angles
 
 
 def worker(angle):
-    return sig_gen(args.fc, args.c, args.r, args.speed, angle, args.d, args.K, args.fs_factor, args.sample_interval)
+    return sig_gen(args.fc, args.c, args.r, args.speed, angle, args.d, args.K, args.SNR, args.fs_factor, args.sample_interval)
 
 
 if __name__ == '__main__':
@@ -117,9 +116,9 @@ if __name__ == '__main__':
                         break
                 for job in as_completed(jobs):
                     jobs_left -= 1
-                    snapshots, fs, _, angles = job.result()
+                    data, fs, _, angles = job.result()
                     del jobs[job]  # 强制回收内存
                     count += 1
                     filename = str(time.time()).replace('.', '')
-                    np.savez(f'{path}/{filename}.npz', snapshots=snapshots, fs=fs, angles=angles)
+                    np.savez(f'{path}/{filename}.npz', data=data, fs=fs, angles=angles)
                     print(f'{count:{width}}: {path}/{filename}.npz')

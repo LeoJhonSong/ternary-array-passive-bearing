@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib import gridspec
 
 if TYPE_CHECKING:
-    from entity import Snapshot_Generator
+    from entity import Array_Data_Sampler
 
 
 def deg_pol2cart(rho: float, angle: float) -> np.ndarray:
@@ -15,7 +15,7 @@ def deg_pol2cart(rho: float, angle: float) -> np.ndarray:
     return rho * np.array([np.cos(theta), np.sin(theta)])
 
 
-def analysis(sig: 'Snapshot_Generator', tau12_hat: float, tau23_hat: float, r_hat: float, angle_hat: float, vel_angle: float):
+def analysis(sig: 'Array_Data_Sampler', tau12_hat: float, tau23_hat: float, r_hat: float, angle_hat: float, vel_angle: float):
     u_orth = np.expand_dims(deg_pol2cart(1, vel_angle - 90), axis=1)
     r_i = np.linalg.norm(
         np.expand_dims(sig.source.position, axis=1) - u_orth @ np.matrix(sig.array.d_i),

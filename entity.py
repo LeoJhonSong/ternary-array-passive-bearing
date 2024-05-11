@@ -9,20 +9,22 @@ from utils import deg_pol2cart
 
 
 class CW_Func_Handler:
-    def __init__(self, f: float, T: float, T_on: float) -> None:
+    def __init__(self, f: float, prf: float, pulse_width: float) -> None:
         self.f = f
-        self.T_on = T_on
-        self.T = T
+        self.pulse_width = pulse_width
+        self.prf = prf  # Pulse repetition frequency
 
     @staticmethod
     @jit(nopython=True, parallel=True)
-    def _generate(t: np.ndarray, f: float, T: float, T_on: float):
+    def _generate(t: np.ndarray, f: float):
         # t为矩阵
-        return np.cos(2 * np.pi * f * t) * (t % T < T_on)
+        return np.cos(2 * np.pi * f * t)
 
     def __call__(self, t: np.ndarray):
         # t为矩阵
-        return self._generate(t, self.f, self.T, self.T_on)
+        s = np.zeros_like(t)
+        s[t % self.prf < self.pulse_width] = self._generate(t[t % self.prf < self.pulse_width], self.f)
+        return s
 
 
 class CW_Source:
@@ -51,7 +53,7 @@ class CW_Source:
         """
         self.add_w_std = add_w_std
         self.add_perlin_mag = add_perlin_mag
-        self.signal_func_callback.T = T_shift * self.signal_func_callback.T
+        self.signal_func_callback.prf = T_shift * self.signal_func_callback.prf
 
     def _noise_gen(self, t: np.ndarray):
         t_len = t.shape[-1]
@@ -84,7 +86,7 @@ class Three_Elements_Array:
         return (self.add_w_std * self.add_w((len(self.add_w_std), len(t))))
 
 
-class Snapshot_Generator:
+class Array_Data_Sampler:
     def __init__(self, source: CW_Source, array: Three_Elements_Array, c: float) -> None:
         """行进中三元线阵数字信号仿真数据
 
