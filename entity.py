@@ -18,11 +18,12 @@ class CW_Func_Handler:
     @jit(nopython=True, parallel=True)
     def _generate(t: np.ndarray, f: float):
         # t为矩阵
-        return np.cos(2 * np.pi * f * t)
+        return np.cos(2 * np.pi * f * t + np.random.uniform(-np.pi, np.pi))  # 随机初相位
 
     def __call__(self, t: np.ndarray):
         # t为矩阵
         s = np.zeros_like(t)
+        t = t + np.random.uniform(0, self.prf)  # 随机脉冲起始时间
         s[t % self.prf < self.pulse_width] = self._generate(t[t % self.prf < self.pulse_width], self.f)
         return s
 
