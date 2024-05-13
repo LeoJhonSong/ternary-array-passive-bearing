@@ -39,7 +39,7 @@ class CW_Source:
         self.perlin_series = np.interp(perlin_noise, [np.min(perlin_noise), np.max(perlin_noise)], [-1, 1])
         self.add_w = Multithreaded_Standard_Normal(seed=seed).generate
 
-    def set_noise_params(self, add_w_std: float = 1e-9, add_perlin_mag: float = 0.5, T_shift: float = 1):
+    def set_noise_params(self, add_w_std: float = 1e-7, add_perlin_mag: float = 0.05, T_shift: float = 1):
         """设置各噪声系数
 
         Parameters

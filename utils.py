@@ -1,10 +1,10 @@
 from typing import TYPE_CHECKING
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from scipy import signal
-import matplotlib.pyplot as plt
 from matplotlib import gridspec
+from scipy import signal
 
 if TYPE_CHECKING:
     from entity import Array_Data_Sampler

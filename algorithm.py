@@ -63,8 +63,7 @@ def far_locate(t12: float, t23: float, c: float, K: float, d: float) -> Tuple[fl
     Tuple[float, float]
         r (m), theta (度). 距离估计值, 方位角估计值
     """
-    t13 = t12 + t23
-    theta = np.arccos((c * t13) / ((K + 1) * d))
+    theta = np.mean(np.arccos((c * np.array([t12, t23])) / (np.array([1, K]) * d)))
     r = (
         K * (K + 1) * ((d * np.sin(theta)) ** 2)
         / (2 * c * (K * t12 - t23))
