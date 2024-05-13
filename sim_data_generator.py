@@ -59,13 +59,13 @@ def sig_gen(fc: float, c: float, r: float, speed: float, angle: float, d: float,
 
     t = np.arange(0, 1, 1 / fs)
     data, r_real, angle_real = array_data_sampler(t, velocity)
-    data_slices = np.zeros((3, len(t), sample_interval))  # shape: (3, t_len, sample_interval)
+    data_slices = np.zeros((sample_interval, 3, len(t)))  # shape: (3, t_len, sample_interval)
     rs = np.zeros((sample_interval, 1))
     angles = np.zeros((sample_interval, 1))
     for i in range(sample_interval):
         t = t + 1
         data, r_real, angle_real = array_data_sampler(t, velocity)
-        data_slices[:, :, i] = data
+        data_slices[i, :, :] = data
         rs[i] = r_real
         angles[i] = angle_real
     return data_slices.astype(np.float32), int(fs), rs, angles
@@ -118,9 +118,9 @@ if __name__ == '__main__':
                         break
                 for job in as_completed(jobs):
                     jobs_left -= 1
-                    data, fs, _, angles = job.result()
+                    data, fs, rs, angles = job.result()
                     del jobs[job]  # 强制回收内存
                     count += 1
                     filename = str(time.time()).replace('.', '')
-                    np.savez(f'{path}/{filename}.npz', data=data, fs=fs, angles=angles)
+                    np.savez(f'{path}/{filename}.npz', data=data, fs=fs, rs=rs, angles=angles)
                     print(f'{count:{width}}: {path}/{filename}.npz')
