@@ -38,6 +38,10 @@ sudo ip route del default via <gateway_ip> dev <interface>
 sudo ip route add default via <gateway_ip> dev <interface> metric <new_metric>
 ```
 
+## 仿真
+
+[用torch生成音频](https://pytorch.org/audio/stable/tutorials/oscillator_tutorial.html)
+
 ## 参考资料
 
 - [dash.dcc.Graph属性](https://dash.plotly.com/dash-core-components/graph#graph-properties)
