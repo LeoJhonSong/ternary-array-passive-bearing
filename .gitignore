@@ -5,3 +5,5 @@ data/**/*.csv
 *.flac
 *.wav
 /exp
+/wandb
+history.png
