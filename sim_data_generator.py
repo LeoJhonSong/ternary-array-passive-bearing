@@ -8,8 +8,6 @@ import numpy as np
 from entity import Array_Data_Sampler, CW_Func_Handler, CW_Source, Three_Elements_Array
 from utils import deg_pol2cart
 
-# TODO: 改为生成为多个flac文件，文件中写入采样率
-
 
 def sig_gen(fc: float, c: float, r: float, speed: float, angle: float, d: float, K: float, SNR_dB: float, fs_factor: int, sample_interval: int):
     """生成指定参数组合的信号片段
@@ -49,30 +47,31 @@ def sig_gen(fc: float, c: float, r: float, speed: float, angle: float, d: float,
         Three_Elements_Array(d, K),
         c=c  # 声速
     )
-    array_data_sampler.set_SNR(SNR_dB)
+    if SNR_dB == 'ideal':
+        array_data_sampler.set_ideal()
+    else:
+        array_data_sampler.set_SNR(float(SNR_dB))
 
     fs = fs_factor * cw_func_handler.f
     vel_angle = 90
     velocity = deg_pol2cart(speed, vel_angle)
 
-    array_data_sampler.set_ideal()
-
     t = np.arange(0, 1, 1 / fs)
     data, r_real, angle_real = array_data_sampler(t, velocity)
-    data_slices = np.zeros((sample_interval, 3, len(t)))  # shape: (3, t_len, sample_interval)
-    rs = np.zeros((sample_interval, 1))
-    angles = np.zeros((sample_interval, 1))
+    data_segments = np.zeros((sample_interval, 3, len(t)))  # shape: (3, t_len, sample_interval)
+    r_n = np.zeros((sample_interval, 1))
+    angle_n = np.zeros((sample_interval, 1))
     for i in range(sample_interval):
         t = t + 1
         data, r_real, angle_real = array_data_sampler(t, velocity)
-        data_slices[i, :, :] = data
-        rs[i] = r_real
-        angles[i] = angle_real
-    return data_slices.astype(np.float32), int(fs), rs, angles
+        data_segments[i, :, :] = data
+        r_n[i] = r_real
+        angle_n[i] = angle_real
+    return data_segments.astype(np.float32), int(fs), r_n, angle_n
 
 
-def worker(angle):
-    return sig_gen(args.fc, args.c, args.r, args.speed, angle, args.d, args.K, args.SNR, args.fs_factor, args.sample_interval)
+def worker(distance, angle):
+    return sig_gen(args.fc, args.c, distance, args.speed, angle, args.d, args.K, args.SNR, args.fs_factor, args.sample_interval)
 
 
 if __name__ == '__main__':
@@ -80,11 +79,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--fc', type=int, default=37500)
     parser.add_argument('--c', type=float, default=1500)
-    parser.add_argument('--r', type=float, default=100)
+    parser.add_argument('--r', nargs=2, type=float, default=[100, 1000])
     parser.add_argument('--speed', type=float, default=0.5)
-    parser.add_argument('--d', type=float, default=1)
-    parser.add_argument('--K', type=float, default=1)
-    parser.add_argument('--SNR', type=float, default=0)
+    parser.add_argument('--d', type=float, default=0.5)
+    parser.add_argument('--K', type=float, default=1.0)
+    parser.add_argument('--SNR', type=str, default='10', help='value could be "ideal" or a float number to set SNR in dB.')
     parser.add_argument('--fs_factor', type=int, default=4)
     parser.add_argument('--sample_interval', type=int, default=1)
     parser.add_argument('--path', type=str, default='dataset')
@@ -105,22 +104,23 @@ if __name__ == '__main__':
 
         label_filename = np.array([])
         source_init_angles = np.random.randint(args.left_limit, args.right_limit + 1, N)
+        source_init_distances = np.random.uniform(args.r[0], args.r[1], N)
         with ThreadPoolExecutor(max_workers=12) as executor:
             count = 0
             jobs = {}
             jobs_left = len(source_init_angles)
-            jobs_iter = iter(source_init_angles)
+            jobs_iter = iter(zip(source_init_distances, source_init_angles))
             while jobs_left:
-                for angle in jobs_iter:
-                    job = executor.submit(worker, angle)
+                for distance, angle in jobs_iter:
+                    job = executor.submit(worker, distance, angle)
                     jobs[job] = angle
                     if len(jobs) > 300:  # 限制同时进行的任务数量, 否则会消耗过量内存
                         break
                 for job in as_completed(jobs):
                     jobs_left -= 1
-                    data, fs, rs, angles = job.result()
+                    data_segments, fs, r_n, angle_n = job.result()
                     del jobs[job]  # 强制回收内存
                     count += 1
                     filename = str(time.time()).replace('.', '')
-                    np.savez(f'{path}/{filename}.npz', data=data, fs=fs, rs=rs, angles=angles)
+                    np.savez(f'{path}/{filename}.npz', data_segments=data_segments, fs=fs, r_n=r_n, angle_n=angle_n)
                     print(f'{count:{width}}: {path}/{filename}.npz')
