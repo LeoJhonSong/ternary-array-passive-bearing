@@ -13,18 +13,23 @@ class CW_Func_Handler:
         self.f = f
         self.pulse_width = pulse_width
         self.prf = prf  # Pulse repetition frequency
+        self.pulse_start = np.random.uniform(0, self.prf)  # 随机脉冲起始时间
+        self.init_phase = np.random.uniform(-np.pi, np.pi)  # 随机初相位
+        # self.pulse_start = 0
+        # self.init_phase = 0
 
     @staticmethod
     @jit(nopython=True, parallel=True)
-    def _generate(t: np.ndarray, f: float):
+    def _generate(t: np.ndarray, f: float, init_phase: float):
         # t为矩阵
-        return np.cos(2 * np.pi * f * t + np.random.uniform(-np.pi, np.pi))  # 随机初相位
+        # return np.cos(2 * np.pi * f * t)
+        return np.cos(2 * np.pi * f * t + init_phase)
 
     def __call__(self, t: np.ndarray):
         # t为矩阵
         s = np.zeros_like(t)
-        t = t + np.random.uniform(0, self.prf)  # 随机脉冲起始时间
-        s[t % self.prf < self.pulse_width] = self._generate(t[t % self.prf < self.pulse_width], self.f)
+        t = t + self.pulse_start
+        s[t % self.prf < self.pulse_width] = self._generate(t[t % self.prf < self.pulse_width], self.f, self.init_phase)
         return s
 
 
