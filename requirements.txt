@@ -9,10 +9,9 @@ matplotlib
 
 dash
 
-# CUDA 11.7
-# torch==2.0.1
-# torchvision==0.15.2
-# torchaudio==2.0.2
+# CUDA 12.1
+# torch==2.1.2+cu121
+# torchvision==0.16.2+cu121
 
 # CPU
 # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
@@ -20,5 +19,6 @@ dash
 accelerate
 torchkeras
 torchmetrics
+wandb
 
 soundfile
