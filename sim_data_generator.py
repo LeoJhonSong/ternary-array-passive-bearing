@@ -79,7 +79,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--fc', type=int, default=37500)
     parser.add_argument('--c', type=float, default=1500)
-    parser.add_argument('--r', nargs=2, type=float, default=[100, 1000])
+    parser.add_argument('--r', nargs=2, type=int, default=[100, 1000])
     parser.add_argument('--speed', type=float, default=0.5)
     parser.add_argument('--d', type=float, default=0.5)
     parser.add_argument('--K', type=float, default=1.0)
@@ -92,7 +92,7 @@ if __name__ == '__main__':
     parser.add_argument('--right_limit', type=int, default=165)
     args = parser.parse_args()
 
-    paths = [f'{args.path}/fc_{args.fc}-fs_factor_{args.fs_factor}-d_{args.d}-K_{args.K}-SNR_{args.SNR}/{item}' for item in ['train', 'val']]
+    paths = [f'{args.path}/fc_{args.fc}-fs_factor_{args.fs_factor}-d_{args.d}-K_{args.K}-SNR_{args.SNR}-r_{args.r[0]}_{args.r[1]}/{item}' for item in ['train', 'val']]
 
     for path, N in zip(paths, args.N):
         width = len(str(N))
@@ -105,7 +105,7 @@ if __name__ == '__main__':
         label_filename = np.array([])
         source_init_angles = np.random.randint(args.left_limit, args.right_limit + 1, N)
         source_init_distances = np.random.uniform(args.r[0], args.r[1], N)
-        with ThreadPoolExecutor(max_workers=12) as executor:
+        with ThreadPoolExecutor(max_workers=32) as executor:
             count = 0
             jobs = {}
             jobs_left = len(source_init_angles)
@@ -114,7 +114,7 @@ if __name__ == '__main__':
                 for distance, angle in jobs_iter:
                     job = executor.submit(worker, distance, angle)
                     jobs[job] = angle
-                    if len(jobs) > 300:  # 限制同时进行的任务数量, 否则会消耗过量内存
+                    if len(jobs) > 3000:  # 限制同时进行的任务数量, 否则会消耗过量内存
                         break
                 for job in as_completed(jobs):
                     jobs_left -= 1
