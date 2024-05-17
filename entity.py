@@ -15,8 +15,6 @@ class CW_Func_Handler:
         self.prf = prf  # Pulse repetition frequency
         self.pulse_start = np.random.uniform(0, self.prf)  # 随机脉冲起始时间
         self.init_phase = np.random.uniform(-np.pi, np.pi)  # 随机初相位
-        # self.pulse_start = 0
-        # self.init_phase = 0
 
     @staticmethod
     @jit(nopython=True, parallel=True)
