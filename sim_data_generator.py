@@ -58,7 +58,7 @@ def sig_gen(fc: float, c: float, r: float, speed: float, angle: float, d: float,
 
     t = np.arange(0, 1, 1 / fs)
     data, r_real, angle_real = array_data_sampler(t, velocity)
-    data_segments = np.zeros((sample_interval, 3, len(t)))  # shape: (3, t_len, sample_interval)
+    data_segments = np.zeros((sample_interval, 3, len(t)))  # shape: (sample_intervals, 3, t_len)
     r_n = np.zeros((sample_interval, 1))
     angle_n = np.zeros((sample_interval, 1))
     for i in range(sample_interval):
