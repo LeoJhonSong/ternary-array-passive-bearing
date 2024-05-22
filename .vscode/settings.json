@@ -14,6 +14,7 @@
         "interpolant",
         "lanczos",
         "maxlag",
+        "nfft",
         "perlin",
         "plotly",
         "radialaxis",
