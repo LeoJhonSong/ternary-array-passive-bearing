@@ -70,8 +70,8 @@ def sig_gen(fc: float, c: float, r: float, speed: float, angle: float, d: float,
     return data_segments.astype(np.float32), int(fs), r_n, angle_n
 
 
-def worker(distance, angle):
-    return sig_gen(args.fc, args.c, distance, args.speed, angle, args.d, args.K, args.SNR, args.fs_factor, args.sample_interval)
+def worker(distance, angle, snr):
+    return sig_gen(args.fc, args.c, distance, args.speed, angle, args.d, args.K, snr, args.fs_factor, args.sample_interval)
 
 
 if __name__ == '__main__':
@@ -83,16 +83,20 @@ if __name__ == '__main__':
     parser.add_argument('--speed', type=float, default=0.5)
     parser.add_argument('--d', type=float, default=0.5)
     parser.add_argument('--K', type=float, default=1.0)
-    parser.add_argument('--SNR', type=str, default='10', help='value could be "ideal" or a float number to set SNR in dB.')
+    parser.add_argument('--SNR', nargs=2, type=int, default=[0, 30], help='SNR in dB.')
+    parser.add_argument('--ideal', action='store_true', help='when this set, SNR would be ignored and ideal signals are generated.')
     parser.add_argument('--fs_factor', type=int, default=4)
     parser.add_argument('--sample_interval', type=int, default=1)
     parser.add_argument('--path', type=str, default='dataset')
-    parser.add_argument('--N', nargs='*', type=int, default=[1600, 400])
+    parser.add_argument('--N', nargs='*', type=int, default=[4000, 1000])
     parser.add_argument('--left_limit', type=int, default=15)
     parser.add_argument('--right_limit', type=int, default=165)
     args = parser.parse_args()
 
-    paths = [f'{args.path}/fc_{args.fc}-fs_factor_{args.fs_factor}-d_{args.d}-K_{args.K}-SNR_{args.SNR}-r_{args.r[0]}_{args.r[1]}/{item}' for item in ['train', 'val']]
+    if args.ideal:
+        paths = [f'{args.path}/fc_{args.fc}-fs_factor_{args.fs_factor}-d_{args.d}-K_{args.K}-SNR_ideal-r_{args.r[0]}_{args.r[1]}/{item}' for item in ['train', 'val']]
+    else:
+        paths = [f'{args.path}/fc_{args.fc}-fs_factor_{args.fs_factor}-d_{args.d}-K_{args.K}-SNR_{args.SNR[0]}_{args.SNR[1]}-r_{args.r[0]}_{args.r[1]}/{item}' for item in ['train', 'val']]
 
     for path, N in zip(paths, args.N):
         width = len(str(N))
@@ -103,16 +107,20 @@ if __name__ == '__main__':
         print(f'Generating {N} samples to {path}')
 
         label_filename = np.array([])
-        source_init_angles = np.random.randint(args.left_limit, args.right_limit + 1, N)
+        source_init_angles = np.random.uniform(args.left_limit, args.right_limit, N)
         source_init_distances = np.random.uniform(args.r[0], args.r[1], N)
+        if args.ideal:
+            snr_batch = ['ideal'] * N
+        else:
+            snr_batch = np.random.uniform(args.SNR[0], args.SNR[1], N)
         with ThreadPoolExecutor(max_workers=32) as executor:
             count = 0
             jobs = {}
             jobs_left = len(source_init_angles)
-            jobs_iter = iter(zip(source_init_distances, source_init_angles))
+            jobs_iter = iter(zip(source_init_distances, source_init_angles, snr_batch))
             while jobs_left:
-                for distance, angle in jobs_iter:
-                    job = executor.submit(worker, distance, angle)
+                for distance, angle, snr in jobs_iter:
+                    job = executor.submit(worker, distance, angle, snr)
                     jobs[job] = angle
                     if len(jobs) > 3000:  # 限制同时进行的任务数量, 否则会消耗过量内存
                         break
