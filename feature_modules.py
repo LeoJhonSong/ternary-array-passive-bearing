@@ -27,7 +27,7 @@ class Spectrogram(nn.Module):
             onesided=True,
             return_complex=True
         )  # shape: (batch_size * seconds * channels, freq, time)
-        spectrogram = spectrogram[:, self.f_low:self.f_high, :]  # NOTE: 只截取感兴趣频段, 目前未考虑8.8kHz
+        spectrogram = spectrogram[:, self.f_low:self.f_high + 1, :]  # NOTE: 只截取感兴趣频段, 目前未考虑8.8kHz
         spectrogram = spectrogram.reshape(-1, channels, spectrogram.shape[-2], spectrogram.shape[-1])  # shape: (batch_size * seconds, channels, freq_limited, time)
         spectrogram = spectrogram.view(batch_size, seconds, channels, spectrogram.shape[-2], spectrogram.shape[-1])  # shape: (batch_size, seconds, channels, freq_limited, time)
         return spectrogram
