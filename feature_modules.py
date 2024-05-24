@@ -47,7 +47,7 @@ class Filter(nn.Module):
     def forward(self, x):
         spectrogram_batch = x.view(-1, x.shape[2], x.shape[3], x.shape[4])  # shape: (batch_size * seconds, channels, freq_limited, time)
         magnitude_batch = torch.sum(torch.abs(spectrogram_batch), dim=1)  # shape: (batch_size * seconds, freq_limited, time)
-        mid_batch = torch.argmax(magnitude_batch[:, 1084, :], dim=1)  # find the time index of the maximum magnitude at the center frequency
+        mid_batch = torch.argmax(magnitude_batch[:, self.fc_index, :], dim=1)  # find the time index of the maximum magnitude at the center frequency
         pulse_mag_batch = torch.zeros(magnitude_batch.shape[:2])  # shape: (batch_size * seconds, freq_limited)
         filtered_spectrogram_batch = torch.zeros_like(spectrogram_batch)
         for i, mid in enumerate(mid_batch):
@@ -65,7 +65,7 @@ class Filter(nn.Module):
             ] = spectrogram_batch[
                 :,
                 :,
-                1084 - half_band:1084 + half_band,
+                self.fc_index - half_band:self.fc_index + half_band,
                 max(0, mid - 8):min(mid + 8, filtered_spectrogram_batch.shape[-1])
             ]
         filtered_spectrogram_batch = filtered_spectrogram_batch.reshape(x.shape)
