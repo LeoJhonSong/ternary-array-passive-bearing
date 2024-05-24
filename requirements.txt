@@ -13,9 +13,8 @@ dash
 # CUDA 12.1
 # torch==2.1.2+cu121
 # torchvision==0.16.2+cu121
-
-# CPU
-# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+# torchaudio==2.1.2+cu121
+# pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --index-url https://download.pytorch.org/whl/cu121
 
 accelerate
 torchkeras
