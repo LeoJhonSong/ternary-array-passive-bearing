@@ -37,15 +37,18 @@ def sig_gen(fc: float, c: float, r: float, speed: float, angle: float, d: float,
         f=fc,  # 声源频率
         prf=1,  # Cw脉冲重复频率
         pulse_width=10e-3,  # Cw信号脉宽
+        device='cuda',
     )
     array_data_sampler = Array_Data_Sampler(
         CW_Source(
             signal_func_callback=cw_func_handler,
             r=r,  # 声源距离
-            angle=angle  # 声源角度
+            angle=angle,  # 声源角度
+            device='cuda',
         ),
-        Three_Elements_Array(d, K),
-        c=c  # 声速
+        Three_Elements_Array(d, K, device='cuda'),
+        c=c,  # 声速
+        device='cuda',
     )
     if SNR_dB == 'ideal':
         array_data_sampler.set_ideal()

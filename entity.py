@@ -1,38 +1,39 @@
 from math import ceil
-from typing import Tuple
+from typing import Literal, Tuple
 
 import numpy as np
-from numba import jit
+import torch
 
-from rng import Multithreaded_Standard_Normal, generate_perlin_noise_2d
+from rng import generate_perlin_noise_2d
 from utils import deg_pol2cart
 
 
 class CW_Func_Handler:
-    def __init__(self, f: float, prf: float, pulse_width: float) -> None:
+    def __init__(self, f: float, prf: float, pulse_width: float, device: Literal['cuda', 'cpu'] = 'cpu') -> None:
         self.f = f
         self.pulse_width = pulse_width
         self.prf = prf  # Pulse repetition frequency
         self.pulse_start = np.random.uniform(0, self.prf)  # 随机脉冲起始时间
         self.init_phase = np.random.uniform(-np.pi, np.pi)  # 随机初相位
+        self.device = device
 
     @staticmethod
-    @jit(nopython=True, parallel=True)
-    def _generate(t: np.ndarray, f: float, init_phase: float):
+    def _generate(t: np.ndarray, f: float, init_phase: float, device):
         # t为矩阵
         # return np.cos(2 * np.pi * f * t)
-        return np.cos(2 * np.pi * f * t + init_phase)
+        phase = torch.tensor(2 * np.pi * f * t + init_phase, device=device)
+        return torch.cos(phase).cpu().numpy()
 
     def __call__(self, t: np.ndarray):
         # t为矩阵
         s = np.zeros_like(t)
         t = t + self.pulse_start
-        s[t % self.prf < self.pulse_width] = self._generate(t[t % self.prf < self.pulse_width], self.f, self.init_phase)
+        s[t % self.prf < self.pulse_width] = self._generate(t[t % self.prf < self.pulse_width], self.f, self.init_phase, self.device)
         return s
 
 
 class CW_Source:
-    def __init__(self, signal_func_callback: CW_Func_Handler, r: float, angle: float, seed: int | None = None) -> None:
+    def __init__(self, signal_func_callback: CW_Func_Handler, r: float, angle: float, seed: int | None = None, device: Literal['cuda', 'cpu'] = 'cpu') -> None:
         self.signal_func_callback = signal_func_callback
         self.r = r
         self.angle = angle
@@ -41,7 +42,10 @@ class CW_Source:
         # initial rng
         perlin_noise = generate_perlin_noise_2d((256, 256), (8, 8), seed=seed).flatten()
         self.perlin_series = np.interp(perlin_noise, [np.min(perlin_noise), np.max(perlin_noise)], [-1, 1])
-        self.add_w = Multithreaded_Standard_Normal(seed=seed).generate
+        g = torch.Generator(device=device)
+        if seed is not None:
+            g.manual_seed(seed)
+        self.add_w = lambda t_len: torch.randn(t_len, generator=g, device=device).cpu().numpy()
 
     def set_noise_params(self, add_w_std: float = 1e-7, add_perlin_mag: float = 0.05, T_shift: float = 1):
         """设置各噪声系数
@@ -68,11 +72,15 @@ class CW_Source:
         return self.add_w_std * self.add_w(t_len) + self.add_perlin_mag * add_perlin
 
     def signal_gen(self, t: np.ndarray):
+        sig = self.signal_func_callback(t)
+        if not (self.add_w_std == 0 and self.add_perlin_mag == 0):
+            sig += self._noise_gen(t)
+        return sig
         return self.signal_func_callback(t) + self._noise_gen(t)
 
 
 class Three_Elements_Array:
-    def __init__(self, d: float, K: float, seed: int | None = None) -> None:
+    def __init__(self, d: float, K: float, seed: int | None = None, device: Literal['cuda', 'cpu'] = 'cpu') -> None:
         self.K = K
         self.d = d
         d1, d2, d3 = -(K + 1) * d / 2, -(K - 1) * d / 2, (K + 1) * d / 2
@@ -81,7 +89,10 @@ class Three_Elements_Array:
         self.position = np.array(np.zeros(2))
         self.set_noise_params()
         # initial rng
-        self.add_w = Multithreaded_Standard_Normal(seed=seed).generate
+        g = torch.Generator(device=device)
+        if seed is not None:
+            g.manual_seed(seed)
+        self.add_w = lambda size: torch.randn(size, generator=g, device=device).cpu().numpy()
 
     def set_noise_params(self, add_w0_std: float = 7e-3, add_w1_std: float = 7e-3, add_w2_std: float = 7e-3):
         self.add_w_std = np.array([add_w0_std, add_w1_std, add_w2_std]).reshape(-1, 1)
@@ -91,7 +102,7 @@ class Three_Elements_Array:
 
 
 class Array_Data_Sampler:
-    def __init__(self, source: CW_Source, array: Three_Elements_Array, c: float) -> None:
+    def __init__(self, source: CW_Source, array: Three_Elements_Array, c: float, device: Literal['cuda', 'cpu'] = 'cpu') -> None:
         """行进中三元线阵数字信号仿真数据
 
         Parameters
@@ -114,6 +125,7 @@ class Array_Data_Sampler:
         self.c = c
         self.t_last = 0
         self.v_orth_last = np.array([1, 0])[:, np.newaxis]
+        self.device = device
 
     def maxlag(self, fs: float) -> int:
         return int(np.ceil(self.array.dist_max / self.c * fs))  # 采样频率下最大滞后量, 即最大时延对应的采样点数
@@ -127,23 +139,17 @@ class Array_Data_Sampler:
         self.array.set_noise_params(deviation, deviation, deviation)
 
     @staticmethod
-    @jit(nopython=True, parallel=True)
-    def _next_rit(array_position: np.ndarray, velocity: np.ndarray, delta_t: np.ndarray, source_position: np.ndarray, d_vec_i: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        array_position, velocity, delta_t = np.broadcast_arrays(array_position[:, np.newaxis], velocity[:, np.newaxis], delta_t[np.newaxis, :])  # shape: (2, t_len)
-        position_t = array_position + velocity * delta_t
-        source_position, position_t_expanded, d_vec_i = np.broadcast_arrays(
-            source_position[:, np.newaxis, np.newaxis],  # shape: (2, 1, 1)
-            position_t[:, np.newaxis, :],  # shape: (2, 1, t_len)
-            d_vec_i[:, :, np.newaxis]  # shape: (2, 3, 1)
-        )  # shape: (2, 3, t_len)
-        r_xy_i_t = source_position - position_t_expanded - d_vec_i
+    def _next_rit(array_position, velocity, delta_t, source_position, d_vec_i, device) -> Tuple[np.ndarray, np.ndarray]:
+        array_position = torch.tensor(array_position, device=device).unsqueeze(1)
+        velocity = torch.tensor(velocity, device=device).unsqueeze(1)
+        delta_t = torch.tensor(delta_t, device=device).unsqueeze(0)
+        position_t = array_position + velocity * delta_t  # shape: (2, t_len)
+        source_position = torch.tensor(source_position[:, np.newaxis, np.newaxis], device=device)  # shape: (2, 1, 1)
+        d_vec_i = torch.tensor(d_vec_i[:, :, np.newaxis], device=device)  # shape: (2, 3, 1)
+        r_xy_i_t = source_position - position_t.unsqueeze(1) - d_vec_i  # shape: (2, 3, t_len)
+        r_xy_i_t = r_xy_i_t.cpu().numpy()
+        position_t = position_t.cpu().numpy()
         return np.sqrt(np.sum(r_xy_i_t ** 2, axis=0)), position_t[:, -1]  # shape: (3, t_len), (2,)
-
-    @staticmethod
-    @jit(nopython=True, parallel=True)
-    def _next_xit(r_i_t: np.ndarray, source_signal: np.ndarray, array_noise: np.ndarray):
-        # TODO: 水声信道的乘性噪声/低通效应还是可以有?
-        return 1 / r_i_t * source_signal + array_noise
 
     def __call__(self, t: np.ndarray, velocity: np.ndarray | Tuple[float, float]) -> Tuple[np.ndarray, float, float]:
         """获取下一组指定时刻信号
@@ -170,13 +176,15 @@ class Array_Data_Sampler:
             velocity,
             t - self.t_last,
             self.source.position,
-            u_orth @ self.array.d_i[np.newaxis, :]  # shape: (2, 3)
+            u_orth @ self.array.d_i[np.newaxis, :],  # shape: (2, 3)
+            self.device
         )
-        x_i_t = self._next_xit(
-            r_i_t,
-            self.source.signal_gen(t - r_i_t / self.c),
-            self.array.noise_gen(t)
-        )
+        source_signal = torch.tensor(self.source.signal_gen(t - r_i_t / self.c), device=self.device)
+        if self.array.add_w_std.sum() == 0:
+            x_i_t = (1 / torch.tensor(r_i_t, device=self.device) * source_signal).cpu().numpy()
+        else:
+            array_noise = torch.tensor(self.array.noise_gen(t), device=self.device)
+            x_i_t = (1 / torch.tensor(r_i_t, device=self.device) * source_signal + array_noise).cpu().numpy()
         self.t_last = t[-1]
         self.v_orth_last = u_orth
         # TODO: 加入对数值的量化按-5~+5V, 16位进行量化
