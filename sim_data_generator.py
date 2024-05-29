@@ -60,17 +60,20 @@ def sig_gen(fc: float, c: float, r: float, speed: float, angle: float, d: float,
     velocity = deg_pol2cart(speed, vel_angle)
 
     t = np.arange(0, 1, 1 / fs)
-    data, r_real, angle_real = array_data_sampler(t, velocity)
+    data, r_real, angle_real, t_bound = array_data_sampler(t, velocity)
     data_segments = np.zeros((sample_interval, 3, len(t)))  # shape: (sample_intervals, 3, t_len)
     r_n = np.zeros((sample_interval, 1))
     angle_n = np.zeros((sample_interval, 1))
+    t_bound_n = np.zeros((sample_interval, 2))
     for i in range(sample_interval):
         t = t + 1
-        data, r_real, angle_real = array_data_sampler(t, velocity)
+        data, r_real, angle_real, t_bound = array_data_sampler(t, velocity)
+        t_bound = np.array((t_bound[0] - t[0], t_bound[1] - t[0]))
         data_segments[i, :, :] = data
         r_n[i] = r_real
         angle_n[i] = angle_real
-    return data_segments.astype(np.float32), int(fs), r_n, angle_n
+        t_bound_n[i] = t_bound
+    return data_segments.astype(np.float32), int(fs), r_n.astype(np.float32), angle_n.astype(np.float32), t_bound_n.astype(np.float32)
 
 
 def worker(distance, angle, snr):
@@ -86,52 +89,51 @@ if __name__ == '__main__':
     parser.add_argument('--speed', type=float, default=0.5)
     parser.add_argument('--d', type=float, default=0.5)
     parser.add_argument('--K', type=float, default=1.0)
-    parser.add_argument('--SNR', nargs=2, type=int, default=[0, 30], help='SNR in dB.')
-    parser.add_argument('--ideal', action='store_true', help='when this set, SNR would be ignored and ideal signals are generated.')
+    # parser.add_argument('--SNR', nargs=2, type=int, default=[0, 30], help='SNR in dB.')
+    # parser.add_argument('--ideal', action='store_true', help='when this set, SNR would be ignored and ideal signals are generated.')
     parser.add_argument('--fs_factor', type=int, default=4)
     parser.add_argument('--sample_interval', type=int, default=1)
     parser.add_argument('--path', type=str, default='dataset')
-    parser.add_argument('--N', nargs='*', type=int, default=[4000, 1000])
+    parser.add_argument('--N', nargs='*', type=int, default=[1000, 500, 500, 500, 500])
     parser.add_argument('--left_limit', type=int, default=15)
     parser.add_argument('--right_limit', type=int, default=165)
     args = parser.parse_args()
 
-    if args.ideal:
-        paths = [f'{args.path}/fc_{args.fc}-fs_factor_{args.fs_factor}-d_{args.d}-K_{args.K}-SNR_ideal-r_{args.r[0]}_{args.r[1]}/{item}' for item in ['train', 'val']]
-    else:
-        paths = [f'{args.path}/fc_{args.fc}-fs_factor_{args.fs_factor}-d_{args.d}-K_{args.K}-SNR_{args.SNR[0]}_{args.SNR[1]}-r_{args.r[0]}_{args.r[1]}/{item}' for item in ['train', 'val']]
+    paths = [f'{args.path}/fc-{args.fc}_fs_factor-{args.fs_factor}_d-{args.d}_K-{args.K}_r-{args.r[0]}-{args.r[1]}/{item}' for item in ['train', 'val']]
+    snr_set = ['ideal', '30', '20', '10', '5']
 
-    for path, N in zip(paths, args.N):
-        width = len(str(N))
+    for i, path in enumerate(paths):
+        for SNR, N in zip(snr_set, args.N):
+            if i == 1:
+                N = N // 4
+            width = len(str(N))
 
-        if not os.path.exists(path):
-            os.makedirs(path)
+            if not os.path.exists(f'{path}/{SNR}'):
+                os.makedirs(f'{path}/{SNR}')
 
-        print(f'Generating {N} samples to {path}')
+            print(f'Generating {N} samples to {path}')
 
-        label_filename = np.array([])
-        source_init_angles = np.random.uniform(args.left_limit, args.right_limit, N)
-        source_init_distances = np.random.uniform(args.r[0], args.r[1], N)
-        if args.ideal:
-            snr_batch = ['ideal'] * N
-        else:
-            snr_batch = np.random.uniform(args.SNR[0], args.SNR[1], N)
-        with ThreadPoolExecutor(max_workers=32) as executor:
-            count = 0
-            jobs = {}
-            jobs_left = len(source_init_angles)
-            jobs_iter = iter(zip(source_init_distances, source_init_angles, snr_batch))
-            while jobs_left:
-                for distance, angle, snr in jobs_iter:
-                    job = executor.submit(worker, distance, angle, snr)
-                    jobs[job] = angle
-                    if len(jobs) > 3000:  # 限制同时进行的任务数量, 否则会消耗过量内存
-                        break
-                for job in as_completed(jobs):
-                    jobs_left -= 1
-                    data_segments, fs, r_n, angle_n = job.result()
-                    del jobs[job]  # 强制回收内存
-                    count += 1
-                    filename = str(time.time()).replace('.', '')
-                    np.savez(f'{path}/{filename}.npz', data_segments=data_segments, fs=fs, r_n=r_n, angle_n=angle_n)
-                    print(f'{count:{width}}: {path}/{filename}.npz')
+            label_filename = np.array([])
+            source_init_angles = np.random.uniform(args.left_limit, args.right_limit, N)
+            source_init_distances = np.random.uniform(args.r[0], args.r[1], N)
+            snr_batch = [SNR] * N
+
+            with ThreadPoolExecutor(max_workers=32) as executor:
+                count = 0
+                jobs = {}
+                jobs_left = len(source_init_angles)
+                jobs_iter = iter(zip(source_init_distances, source_init_angles, snr_batch))
+                while jobs_left:
+                    for distance, angle, snr in jobs_iter:
+                        job = executor.submit(worker, distance, angle, snr)
+                        jobs[job] = angle
+                        if len(jobs) > 3000:  # 限制同时进行的任务数量, 否则会消耗过量内存
+                            break
+                    for job in as_completed(jobs):
+                        jobs_left -= 1
+                        data_segments, fs, r_n, angle_n, t_bound_n = job.result()
+                        del jobs[job]  # 强制回收内存
+                        count += 1
+                        filename = str(time.time()).replace('.', '')
+                        np.savez(f'{path}/{SNR}/{filename}.npz', data_segments=data_segments, fs=fs, r_n=r_n, angle_n=angle_n, t_bound_n=t_bound_n)
+                        print(f'{count:{width}}: {path}/{filename}.npz')

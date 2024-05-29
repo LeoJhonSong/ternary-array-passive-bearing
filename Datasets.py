@@ -31,11 +31,12 @@ class Array_Data_DataSet(Dataset):
 
     def __getitem__(self, idx):
         dataDict = np.load(f'{self.folder_path}/{self.filenames[idx]}')
-        data_n, _, r_n, angle_n = dataDict['data_segments'], dataDict['fs'], dataDict['r_n'], dataDict['angle_n']
+        data_n, _, r_n, angle_n, t_bound_n = dataDict['data_segments'], dataDict['fs'], dataDict['r_n'], dataDict['angle_n'], dataDict['t_bound_n']
         data_n = torch.tensor(data_n, dtype=torch.float32)  # shape: (sample_intervals, channels t_len)
         r_n = torch.tensor(r_n, dtype=torch.float32).reshape(-1)
         angle_n = torch.tensor(angle_n, dtype=torch.float32).reshape(-1)
         theta_n = torch.deg2rad(angle_n)
+        t_bound_n = torch.tensor(t_bound_n, dtype=torch.float32).reshape(-1, 2)
         if self.label_type == 'direction':
             label_n = torch.stack((
                 torch.cos(theta_n),

@@ -31,6 +31,12 @@ class CW_Func_Handler:
         s[t % self.prf < self.pulse_width] = self._generate(t[t % self.prf < self.pulse_width], self.f, self.init_phase, self.device)
         return s
 
+    def t_bound(self, t: np.ndarray):
+        pulse_edge = np.diff(((t + self.pulse_start) % self.prf < self.pulse_width).astype(int))
+        first = np.where(pulse_edge == 1)[0][0]
+        last = np.where(pulse_edge == -1)[0][0] + 1
+        return first, last
+
 
 class CW_Source:
     def __init__(self, signal_func_callback: CW_Func_Handler, r: float, angle: float, seed: int | None = None, device: Literal['cuda', 'cpu'] = 'cpu') -> None:
@@ -76,7 +82,16 @@ class CW_Source:
         if not (self.add_w_std == 0 and self.add_perlin_mag == 0):
             sig += self._noise_gen(t)
         return sig
-        return self.signal_func_callback(t) + self._noise_gen(t)
+
+    def t_bound(self, t: np.ndarray):
+        first, last = t.shape[1], 0
+        for i in range(t.shape[0]):
+            _first, _last = self.signal_func_callback.t_bound(t[i])
+            if _first < first:
+                first = _first
+            if _last > last:
+                last = _last
+        return first, last
 
 
 class Three_Elements_Array:
@@ -151,7 +166,7 @@ class Array_Data_Sampler:
         position_t = position_t.cpu().numpy()
         return np.sqrt(np.sum(r_xy_i_t ** 2, axis=0)), position_t[:, -1]  # shape: (3, t_len), (2,)
 
-    def __call__(self, t: np.ndarray, velocity: np.ndarray | Tuple[float, float]) -> Tuple[np.ndarray, float, float]:
+    def __call__(self, t: np.ndarray, velocity: np.ndarray | Tuple[float, float]) -> Tuple[np.ndarray, float, float, np.ndarray]:
         """获取下一组指定时刻信号
 
         Parameters
@@ -185,7 +200,8 @@ class Array_Data_Sampler:
         else:
             array_noise = torch.tensor(self.array.noise_gen(t), device=self.device)
             x_i_t = (1 / torch.tensor(r_i_t, device=self.device) * source_signal + array_noise).cpu().numpy()
+        first, last = self.source.t_bound(t - r_i_t / self.c)
         self.t_last = t[-1]
         self.v_orth_last = u_orth
         # TODO: 加入对数值的量化按-5~+5V, 16位进行量化
-        return x_i_t, r_real, angle_real
+        return x_i_t, r_real, angle_real, np.array((t[first], t[last]))
