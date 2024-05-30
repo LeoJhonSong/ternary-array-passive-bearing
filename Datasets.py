@@ -11,12 +11,12 @@ class Array_Data_DataSet(Dataset):
     Returns
     -------
     data_n : torch.Tensor[torch.float32]
-        shape: `[channels, t_len]`, 暂时只从`[sample_intervals, channels, t_len]`取第一个时间段
+        若label_type=='direction', shape: `[channels, t_len]`,
+        若label_type=='position', shape: `(sample_intervals, channels, t_len)`
     fs : torch.int64
     label_n : torch.Tensor[torch.float32]
-        shape: `[2]` or `[3]`, 暂时只从`[sample_intervals]`取第一个时间段
-    angle_n : torch.Tensor[torch.float32]
-        shape: `[sample_intervals]`
+        若label_type=='direction', shape: `[2]` or `[3]`, 暂时只从`[sample_intervals]`取第一个时间段,
+        若label_type=='position', shape: `(sample_intervals, 2)` or `(sample_intervals, 3)`
     """
 
     def __init__(self, folder_path: str, seq: bool, label_type: Literal['direction', 'position'], distance_range: Tuple[float | int, float | int] = (800, 1000)):
@@ -33,7 +33,7 @@ class Array_Data_DataSet(Dataset):
     def __getitem__(self, idx):
         dataDict = np.load(self.filenames[idx])
         data_n, _, r_n, angle_n, t_bound_n = dataDict['data_segments'], dataDict['fs'], dataDict['r_n'], dataDict['angle_n'], dataDict['t_bound_n']
-        data_n = torch.tensor(data_n, dtype=torch.float32)  # shape: (sample_intervals, channels t_len)
+        data_n = torch.tensor(data_n, dtype=torch.float32)  # shape: (sample_intervals, channels, t_len)
         r_n = torch.tensor(r_n, dtype=torch.float32).reshape(-1)
         angle_n = torch.tensor(angle_n, dtype=torch.float32).reshape(-1)
         theta_n = torch.deg2rad(angle_n)
@@ -52,7 +52,7 @@ class Array_Data_DataSet(Dataset):
         else:
             raise ValueError('Wrong label_type')
         if self.seq:
-            return data_n, label_n.permute(1, 0)
+            return data_n, label_n
         else:
             return data_n[0].unsqueeze(0), label_n[0]
 
