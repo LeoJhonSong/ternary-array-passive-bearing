@@ -136,4 +136,4 @@ if __name__ == '__main__':
                         count += 1
                         filename = str(time.time()).replace('.', '')
                         np.savez(f'{path}/{SNR}/{filename}.npz', data_segments=data_segments, fs=fs, r_n=r_n, angle_n=angle_n, t_bound_n=t_bound_n)
-                        print(f'{count:{width}}: {path}/{filename}.npz')
+                        print(f'{count:{width}}: {path}/{SNR}/{filename}.npz')
