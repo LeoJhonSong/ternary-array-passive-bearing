@@ -19,10 +19,11 @@ class Array_Data_DataSet(Dataset):
         shape: `[sample_intervals]`
     """
 
-    def __init__(self, folder_path: str, label_type: Literal['direction', 'position'], distance_range: Tuple[float | int, float | int] = (800, 1000)):
+    def __init__(self, folder_path: str, seq: bool, label_type: Literal['direction', 'position'], distance_range: Tuple[float | int, float | int] = (800, 1000)):
         # folder_path下所有文件的列表
         self.folder_path = folder_path
-        self.filenames = os.listdir(folder_path)
+        self.filenames = [f'{folder_path}/{filename}' for filename in os.listdir(folder_path)]
+        self.seq = seq
         self.label_type = label_type
         self.distance_range = distance_range
 
@@ -30,7 +31,7 @@ class Array_Data_DataSet(Dataset):
         return len(self.filenames)
 
     def __getitem__(self, idx):
-        dataDict = np.load(f'{self.folder_path}/{self.filenames[idx]}')
+        dataDict = np.load(self.filenames[idx])
         data_n, _, r_n, angle_n, t_bound_n = dataDict['data_segments'], dataDict['fs'], dataDict['r_n'], dataDict['angle_n'], dataDict['t_bound_n']
         data_n = torch.tensor(data_n, dtype=torch.float32)  # shape: (sample_intervals, channels t_len)
         r_n = torch.tensor(r_n, dtype=torch.float32).reshape(-1)
@@ -50,7 +51,10 @@ class Array_Data_DataSet(Dataset):
             ), dim=1)
         else:
             raise ValueError('Wrong label_type')
-        return data_n[0], label_n[0]
+        if self.seq:
+            return data_n, label_n.permute(1, 0)
+        else:
+            return data_n[0].unsqueeze(0), label_n[0]
 
     def map_distance(self, distances: torch.Tensor):
         """
@@ -101,3 +105,21 @@ class Array_Data_DataSet(Dataset):
         # map from [0, 1] to distance_range
         distances = distances * (self.distance_range[1] - self.distance_range[0]) + self.distance_range[0]
         return distances, self.labels2angles(labels)
+
+
+class Curriculum_Array_Dataset(Array_Data_DataSet):
+    def __init__(self, folder_path: str, seq: bool, curriculum: Tuple[int, int, int, int], label_type: Literal['direction', 'position'], distance_range: Tuple[float | int, float | int] = (800, 1000)):
+        super().__init__(folder_path, seq, label_type, distance_range)
+        self.subfolders = [f'{folder_path}/{subfolder}' for subfolder in ['ideal', '30', '20', '10', '5']]
+        self.subfolders = [subfolder for subfolder in self.subfolders if os.path.exists(subfolder)]
+        self.file_tree = [[f'{subfolder}/{filename}' for filename in os.listdir(subfolder)] for subfolder in self.subfolders]
+        self.curriculum = curriculum
+        self.step(0)
+
+    def step(self, epoch: int):
+        for i in range(len(self.curriculum)):
+            if epoch <= self.curriculum[i]:
+                self.filenames = [filename for filenames in self.file_tree[:i + 1] for filename in filenames]
+                break
+        else:
+            self.filenames = [filename for filenames in self.file_tree[:i + 2] for filename in filenames]

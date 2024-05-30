@@ -8,12 +8,10 @@ class Spectrogram(nn.Module):
     accept waveform segments as input, shape: (batch_size, seconds, channels, time)
     """
 
-    def __init__(self, fs, nfft, hop_factor):
+    def __init__(self, fs, nfft, hop_factor, f_low, f_high):
         super().__init__()
         self.nfft = nfft
         self.hop_factor = hop_factor
-        f_low = 20e3
-        f_high = 60e3
         f = np.linspace(0, fs / 2, int(nfft / 2 + 1))
         f_idx = np.argwhere((f > f_low) & (f < f_high)).squeeze()
         self.f_low = f_idx[0]
@@ -36,10 +34,9 @@ class Spectrogram(nn.Module):
 
 
 class Filter(nn.Module):
-    def __init__(self, fs, nfft, fc):
+    """以幅度谱中目标频段的能量和信噪比为依据将背景置零, 输出的是STFT复数张量"""
+    def __init__(self, fs, nfft, fc, f_low, f_high):
         super().__init__()
-        f_low = 20e3
-        f_high = 60e3
         f = np.linspace(0, fs / 2, int(nfft / 2 + 1))
         self.f = f[(f > f_low) & (f < f_high)]
         self.fc_index = int(np.argwhere(self.f == fc)[0][0])
@@ -52,20 +49,20 @@ class Filter(nn.Module):
         filtered_spectrogram_batch = torch.zeros_like(spectrogram_batch)
         for i, mid in enumerate(mid_batch):
             mid = int(mid)
-            pulse_mag_batch[i] = torch.sum(magnitude_batch[i, :, max(0, mid - 8):mid + 8], dim=1)
+            pulse_mag_batch[i] = torch.sum(magnitude_batch[i, :, max(0, mid - 20):mid + 20], dim=1)
             noise_mag = torch.mean(magnitude_batch[i, (self.f < 40e3) | (self.f > 44e3)])
             sig_mag = pulse_mag_batch[i, self.fc_index]
             snr = 10 * torch.log10((sig_mag - noise_mag)**2 / noise_mag**2)
-            half_band = max(int((12.5 * (snr.cpu() - 20) + 27)), 8)
+            half_band = max(int((6 * (snr.cpu() - 48) + 27)), 8)
             filtered_spectrogram_batch[
                 :,
                 :,
-                self.fc_index - half_band:self.fc_index + half_band,
+                max(0, self.fc_index - half_band):self.fc_index + half_band,
                 max(0, mid - 8):min(mid + 8, filtered_spectrogram_batch.shape[-1])
             ] = spectrogram_batch[
                 :,
                 :,
-                self.fc_index - half_band:self.fc_index + half_band,
+                max(0, self.fc_index - half_band):self.fc_index + half_band,
                 max(0, mid - 8):min(mid + 8, filtered_spectrogram_batch.shape[-1])
             ]
         filtered_spectrogram_batch = filtered_spectrogram_batch.reshape(x.shape)
