@@ -34,8 +34,8 @@ class Spectrogram(nn.Module):
 
 
 class Filter(nn.Module):
-    """以幅度谱中目标频段的能量和信噪比为依据将背景置零, 输出的是STFT复数张量"""
     def __init__(self, fs, nfft, fc, f_low, f_high):
+        """以幅度谱中目标频段的能量和信噪比为依据将背景置零, 输出的是STFT复数张量"""
         super().__init__()
         f = np.linspace(0, fs / 2, int(nfft / 2 + 1))
         self.f = f[(f > f_low) & (f < f_high)]
@@ -67,6 +67,32 @@ class Filter(nn.Module):
             ]
         filtered_spectrogram_batch = filtered_spectrogram_batch.reshape(x.shape)
         return filtered_spectrogram_batch
+
+
+class Crop(nn.Module):
+    def __init__(self, fs, nfft, fc, f_low, f_high):
+        super().__init__()
+        f = np.linspace(0, fs / 2, int(nfft / 2 + 1))
+        self.f = f[(f > f_low) & (f < f_high)]
+        self.fc_index = int(np.argwhere(self.f == fc)[0][0])
+
+    def forward(self, x):
+        spectrogram_batch = x.view(-1, x.shape[2], x.shape[3], x.shape[4])  # shape: (batch_size * seconds, channels, freq_limited, time)
+        magnitude_batch = torch.sum(torch.abs(spectrogram_batch), dim=1)  # shape: (batch_size * seconds, freq_limited, time)
+        mid_batch = torch.argmax(magnitude_batch[:, self.fc_index, :], dim=1)  # find the time index of the maximum magnitude at the center frequency
+        t_len = 16
+        front, end = t_len // 2 - 1, t_len // 2 + 1
+        cropped_spectrogram_batch = torch.zeros(spectrogram_batch.shape[0], spectrogram_batch.shape[1], spectrogram_batch.shape[2], t_len, device=x.device, dtype=spectrogram_batch.dtype)
+        for i, mid in enumerate(mid_batch):
+            mid = int(mid)
+            if mid < front:
+                cropped_spectrogram_batch[i, :, :, front - mid:] = spectrogram_batch[i, :, :, :mid + end]
+            elif mid > spectrogram_batch.shape[3] - end:
+                cropped_spectrogram_batch[i, :, :, :front - mid + spectrogram_batch.shape[3]] = spectrogram_batch[i, :, :, mid - front:]
+            else:
+                cropped_spectrogram_batch[i, :, :, :] = spectrogram_batch[i, :, :, mid - front:mid + end]
+        cropped_spectrogram_batch = cropped_spectrogram_batch.reshape(x.shape[0], x.shape[1], x.shape[2], x.shape[3], t_len)
+        return cropped_spectrogram_batch
 
 
 class CPSD_Phase_Spectrogram(nn.Module):
