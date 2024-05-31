@@ -6,12 +6,15 @@
     ],
     "cSpell.words": [
         "angularaxis",
+        "autodl",
         "Barpolar",
         "cmap",
         "cpsd",
         "gridcolor",
+        "hyperband",
         "interp",
         "interpolant",
+        "kerascallbacks",
         "lanczos",
         "maxlag",
         "nfft",
@@ -22,6 +25,9 @@
         "scaleanchor",
         "scaleratio",
         "tileable",
+        "torchkeras",
+        "torchmetrics",
+        "wandb",
         "xaxes",
         "xcorr"
     ]
