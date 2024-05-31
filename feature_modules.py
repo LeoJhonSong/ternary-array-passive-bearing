@@ -113,3 +113,49 @@ class CPSD_Phase_Spectrogram(nn.Module):
         ), dim=1)  # shape: (batch_size * seconds, 3, freq_limited, time)
         phase12_23_13 = torch.angle(cpsd12_23_13).view(batch_size, seconds, 3, freq_len, t_len)  # shape: (batch_size, seconds, 3, freq_limited, time)
         return phase12_23_13
+
+
+class Cropped_Feature(nn.Module):
+    def __init__(self, fs, fc, f_low, f_high):
+        super().__init__()
+        nfft = 8192
+        self.spectrogram = Spectrogram(fs, nfft, 16, f_low, f_high)
+        self.cropper = Crop(fs, nfft, fc, f_low, f_high)
+
+    def forward(self, x):
+        x = self.spectrogram(x)
+        x = self.cropper(x)
+        return x
+
+
+class STFT_Magnitude_Feature(Cropped_Feature):
+    def __init__(self, fs, fc, f_low, f_high):
+        super().__init__(fs, fc, f_low, f_high)
+
+    def forward(self, x):
+        x = super().forward(x)
+        x = torch.abs(x)
+        return x
+
+
+class CPSD_Phase_Feature(Cropped_Feature):
+    def __init__(self, fs, fc, f_low, f_high):
+        super().__init__(fs, fc, f_low, f_high)
+        self.cpsd_phase = CPSD_Phase_Spectrogram()
+
+    def forward(self, x):
+        x = super().forward(x)
+        x = self.cpsd_phase(x)
+        return x
+
+
+class CPSD_Phase_Diff_Feature(Cropped_Feature):
+    def __init__(self, fs, fc, f_low, f_high):
+        super().__init__(fs, fc, f_low, f_high)
+        self.cpsd_phase = CPSD_Phase_Spectrogram()
+
+    def forward(self, x):
+        x = super().forward(x)
+        x = self.cpsd_phase(x)
+        x = torch.diff(x, dim=-2)
+        return x
