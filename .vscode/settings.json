@@ -2,7 +2,8 @@
     "conventionalCommits.scopes": [
         "算法框架",
         "算法细化",
-        "界面"
+        "界面",
+        "硬件"
     ],
     "cSpell.words": [
         "angularaxis",
