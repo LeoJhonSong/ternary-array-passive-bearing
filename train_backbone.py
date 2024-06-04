@@ -39,7 +39,7 @@ project = 'backbone'
 sweep = True
 config = Namespace(
     label_type='direction',
-    curriculum=(0, 0, 300, 40),
+    curriculum=(-1, -1, 300, 40),
     step_size=10,
     gamma=0.5,
     feature='CPSD_Phase_Diff_Feature',
@@ -89,11 +89,12 @@ def train(config, wandb_cb):
     if not os.path.exists(exp_path):
         os.makedirs(exp_path)
 
-    net = models.Custom_ResNet18(features[config.feature], fs, fc, 20e3, 60e3, config.label_type)
     ds_train = Datasets.Curriculum_Array_Dataset(train_path, seq=False, curriculum=config.curriculum, label_type=config.label_type, distance_range=r_range)
     ds_val = Datasets.Curriculum_Array_Dataset(val_path, seq=False, curriculum=config.curriculum, label_type=config.label_type, distance_range=r_range)
     dl_train = DataLoader(ds_train, batch_size=config.batch_size, shuffle=True, num_workers=16, drop_last=False)
     dl_val = DataLoader(ds_val, batch_size=config.batch_size, shuffle=True, num_workers=16, drop_last=False)
+
+    net = models.Custom_ResNet18(features[config.feature], fs, fc, 20e3, 60e3, config.label_type)
     optimizer = optim.Adam(net.parameters(), lr=config.lr)
     # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=config.step_size, gamma=config.gamma)
 
