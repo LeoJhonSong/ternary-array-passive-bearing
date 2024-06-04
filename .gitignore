@@ -8,3 +8,4 @@ data/**/*.csv
 /exp
 /wandb
 history.png
+/models

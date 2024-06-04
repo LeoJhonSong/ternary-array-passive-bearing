@@ -45,7 +45,7 @@ class Filter(nn.Module):
         spectrogram_batch = x.view(-1, x.shape[2], x.shape[3], x.shape[4])  # shape: (batch_size * seconds, channels, freq_limited, time)
         magnitude_batch = torch.sum(torch.abs(spectrogram_batch), dim=1)  # shape: (batch_size * seconds, freq_limited, time)
         mid_batch = torch.argmax(magnitude_batch[:, self.fc_index, :], dim=1)  # find the time index of the maximum magnitude at the center frequency
-        pulse_mag_batch = torch.zeros(magnitude_batch.shape[:2])  # shape: (batch_size * seconds, freq_limited)
+        pulse_mag_batch = torch.zeros(magnitude_batch.shape[:2], device=x.device)  # shape: (batch_size * seconds, freq_limited)
         filtered_spectrogram_batch = torch.zeros_like(spectrogram_batch)
         for i, mid in enumerate(mid_batch):
             mid = int(mid)
@@ -77,8 +77,8 @@ class Crop(nn.Module):
         self.fc_index = int(np.argwhere(self.f == fc)[0][0])
 
     def forward(self, x):
-        spectrogram_batch = x.view(-1, x.shape[2], x.shape[3], x.shape[4])  # shape: (batch_size * seconds, channels, freq_limited, time)
-        magnitude_batch = torch.sum(torch.abs(spectrogram_batch), dim=1)  # shape: (batch_size * seconds, freq_limited, time)
+        spectrogram_batch = x.view(-1, x.shape[2], x.shape[3], x.shape[4])  # shape: (batch_size * seq_len, channels, freq_limited, time)
+        magnitude_batch = torch.sum(torch.abs(spectrogram_batch), dim=1)  # shape: (batch_size * seq_len, freq_limited, time)
         mid_batch = torch.argmax(magnitude_batch[:, self.fc_index, :], dim=1)  # find the time index of the maximum magnitude at the center frequency
         t_len = 16
         front, end = t_len // 2 - 1, t_len // 2 + 1
@@ -91,8 +91,31 @@ class Crop(nn.Module):
                 cropped_spectrogram_batch[i, :, :, :front - mid + spectrogram_batch.shape[3]] = spectrogram_batch[i, :, :, mid - front:]
             else:
                 cropped_spectrogram_batch[i, :, :, :] = spectrogram_batch[i, :, :, mid - front:mid + end]
-        cropped_spectrogram_batch = cropped_spectrogram_batch.reshape(x.shape[0], x.shape[1], x.shape[2], x.shape[3], t_len)
-        return cropped_spectrogram_batch
+        pulse_mag_batch = torch.sum(torch.abs(cropped_spectrogram_batch), dim=(1, 3))  # shape: (batch_size * seq_len, freq_limited)
+        noise_mag_batch = torch.mean(pulse_mag_batch[:, (self.f < 41e3) | (self.f > 44e3)], dim=1)  # shape: (batch_size * seq_len,)
+        sig_mag_batch = pulse_mag_batch[:, self.fc_index]  # shape: (batch_size * seq_len,)
+        snr_batch = 10 * torch.log10((sig_mag_batch - noise_mag_batch)**2 / noise_mag_batch**2)  # shape: (batch_size * seq_len,)
+        half_band_batch = self.snr_band_map(snr_batch)
+        musk_batch = torch.zeros(spectrogram_batch.shape[0], spectrogram_batch.shape[2], t_len, device=x.device)  # shape: (batch_size * seq_len, freq_limited, t_len)
+        for i, half_band in enumerate(half_band_batch):
+            half_band = int(half_band)
+            musk_batch[i, max(0, self.fc_index - half_band):self.fc_index + half_band, :] = 1
+        musk_batch = musk_batch.view(x.shape[0], x.shape[1], x.shape[3], t_len)  # shape: (batch_size, seq_len, freq_limited, t_len)
+        cropped_spectrogram_batch = cropped_spectrogram_batch.view(x.shape[0], x.shape[1], x.shape[2], x.shape[3], t_len)
+        return cropped_spectrogram_batch, musk_batch
+
+    def snr_band_map(self, snr_batch):
+        r5 = snr_batch < 30
+        r10 = snr_batch < 40
+        r20 = snr_batch < 46
+        r30 = snr_batch < 47.5
+        half_band_batch = torch.zeros_like(snr_batch)
+        half_band_batch[r5] = 0.1 * (snr_batch[r5] - 28) + 20
+        half_band_batch[~r5 & r10] = 0.1 * (snr_batch[~r5 & r10] - 33.7) + 35
+        half_band_batch[~r10 & r20] = 0.1 * (snr_batch[~r10 & r20] - 42) + 125
+        half_band_batch[~r20 & r30] = 0.1 * (snr_batch[~r20 & r30] - 46.5) + 300
+        half_band_batch[~r30] = 0.1 * (snr_batch[~r30] - 47.5) + 500
+        return half_band_batch.int()
 
 
 class CPSD_Phase_Spectrogram(nn.Module):
@@ -124,8 +147,8 @@ class Cropped_Feature(nn.Module):
 
     def forward(self, x):
         x = self.spectrogram(x)
-        x = self.cropper(x)
-        return x
+        x, musk = self.cropper(x)
+        return x, musk
 
 
 class STFT_Magnitude_Feature(Cropped_Feature):
@@ -133,9 +156,9 @@ class STFT_Magnitude_Feature(Cropped_Feature):
         super().__init__(fs, fc, f_low, f_high)
 
     def forward(self, x):
-        x = super().forward(x)
+        x, musk = super().forward(x)
         x = torch.abs(x)
-        return x
+        return x, musk
 
 
 class CPSD_Phase_Feature(Cropped_Feature):
@@ -144,9 +167,9 @@ class CPSD_Phase_Feature(Cropped_Feature):
         self.cpsd_phase = CPSD_Phase_Spectrogram()
 
     def forward(self, x):
-        x = super().forward(x)
+        x, musk = super().forward(x)
         x = self.cpsd_phase(x)
-        return x
+        return x, musk
 
 
 class CPSD_Phase_Diff_Feature(Cropped_Feature):
@@ -155,7 +178,7 @@ class CPSD_Phase_Diff_Feature(Cropped_Feature):
         self.cpsd_phase = CPSD_Phase_Spectrogram()
 
     def forward(self, x):
-        x = super().forward(x)
+        x, musk = super().forward(x)
         x = self.cpsd_phase(x)
         x = torch.diff(x, dim=-2)
-        return x
+        return x, musk

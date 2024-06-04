@@ -15,7 +15,7 @@ class Custom_ResNet18(nn.Module):
         self.backbone = resnet18(num_classes=2 if label_type == 'direction' else 3)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.feature(x)
+        x, musk = self.feature(x)
         x = x.squeeze(1)
         x = self.backbone(x)
         return x
@@ -28,16 +28,16 @@ class Custom_ViT_B_32(nn.Module):
         self.backbone = vit_b_32(num_classes=2 if label_type == 'direction' else 3)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.feature(x)
+        x, musk = self.feature(x)
         x = x.squeeze(1)
         x = self.backbone(x)
         return x
 
 
-class CPSD_Phase_Diff_Resnet18_attConvLSTM(nn.Module):
-    def __init__(self, fs, fc, f_low, f_high, label_type: Literal['direction', 'position'], backbone: Custom_ResNet18):
+class Resnet18_attConvLSTM(nn.Module):
+    def __init__(self, backbone: Custom_ResNet18, fs, fc, f_low, f_high, label_type: Literal['direction', 'position']):
         super().__init__()
-        self.feature = feature_modules.CPSD_Phase_Diff_Feature(fs, fc, f_low, f_high)
+        self.feature = backbone.feature
         self.pyramid = modules.Pyramid(backbone)
         self.attConvLSTM1 = modules.AttentionConvLSTM(64, 64, (3, 3), 1)  # TODO: 试试hidden_dim更小会怎样
         self.attConvLSTM2 = modules.AttentionConvLSTM(128, 128, (3, 3), 1)
@@ -49,18 +49,18 @@ class CPSD_Phase_Diff_Resnet18_attConvLSTM(nn.Module):
         for param in self.pyramid.parameters():
             param.requires_grad = False
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.feature(x)
+    def forward(self, x: torch.Tensor):
+        x, musk = self.feature(x)
         seq_len = x.shape[1]
         x = x.view(-1, x.shape[-3], x.shape[-2], x.shape[-1])  # shape: (batch_size * seq_len, channels, h, w)
         x1, x2, x3, x4 = self.pyramid(x)
         x1, x2, x3, x4 = self.to_seq([x1, x2, x3, x4], seq_len)  # shape: (batch_size, seq_len, channels, h, w)
-        x1, _ = self.attConvLSTM1(x1)  # shape: (batch_size, seq_len, 64, 482, 8)
-        x2, _ = self.attConvLSTM2(x2)  # shape: (batch_size, seq_len, 128, 241, 4)
-        x3, _ = self.attConvLSTM3(x3)  # shape: (batch_size, seq_len, 256, 121, 2)
-        x4, _ = self.attConvLSTM4(x4)  # shape: (batch_size, seq_len, 512, 61, 1)
+        x1, _, a1 = self.attConvLSTM1(x1)  # shape: (batch_size, seq_len, 64, 241, 4)
+        x2, _, a2 = self.attConvLSTM2(x2)  # shape: (batch_size, seq_len, 128, 121, 2)
+        x3, _, a3 = self.attConvLSTM3(x3)  # shape: (batch_size, seq_len, 256, 61, 1)
+        x4, _, a4 = self.attConvLSTM4(x4)  # shape: (batch_size, seq_len, 512, 31, 1)
         x = self.head(x1, x2, x3, x4)  # shape: (batch_size, seq_len, label_dim)
-        return x.contiguous()
+        return x.contiguous(), musk, a1, a2, a3, a4
 
     def to_seq(self, tensors, seq_len):
         for i, tensor in enumerate(tensors):

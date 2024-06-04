@@ -222,7 +222,7 @@ class CurriculumModel(KerasModel):
                 [cb.on_validation_epoch_end(model=self) for cb in self.callbacks
                  if hasattr(cb, 'on_validation_epoch_end')]
 
-            self.save_ckpt(f'{ckpt_path}/latest.pt', accelerator=self.accelerator)
+            # self.save_ckpt(f'{ckpt_path}/latest.pt', accelerator=self.accelerator)
             # 3，early-stopping -------------------------------------------------
             self.accelerator.wait_for_everyone()
             arr_scores = self.history[monitor]

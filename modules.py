@@ -1,5 +1,10 @@
+from typing import TYPE_CHECKING
+
 import torch
 from torch import nn
+
+if TYPE_CHECKING:
+    import models
 
 
 class CausalConv1d(nn.Module):
@@ -59,7 +64,7 @@ class AttentionConvLSTMCell(nn.Module):
         o = torch.sigmoid(output_gate)
         c = f * prev_c + i * c_
         h = o * torch.tanh(c)
-        return h, c
+        return h, c, attention.squeeze(1)
 
     def init_hidden(self, batch_size, input_size):
         height, width = input_size
@@ -90,12 +95,14 @@ class AttentionConvLSTM(nn.Module):
         for layer_idx in range(self.num_layers):
             h, c = hidden_state[layer_idx]
             output_inner = []
+            attention_maps = []
             for t in range(seq_len):
-                h, c = self.cell_list[layer_idx](x=cur_layer_input[:, t, :, :, :], prev_state=[h, c])
+                h, c, attention = self.cell_list[layer_idx](x=cur_layer_input[:, t, :, :, :], prev_state=[h, c])
                 output_inner.append(h)
-            layer_output = torch.stack(output_inner, dim=0)
+                attention_maps.append(attention)
+            layer_output = torch.stack(output_inner, dim=1)
             cur_layer_input = layer_output
-        return layer_output, hidden_state
+        return layer_output, hidden_state, torch.stack(attention_maps, dim=1)
 
     def _init_hidden(self, batch_size, input_size):
         init_states = []
@@ -137,9 +144,9 @@ class Head(nn.Module):
 
 
 class Pyramid(nn.Module):
-    def __init__(self, backbone):
+    def __init__(self, model: 'models.Custom_ResNet18'):
         super().__init__()
-        backbone = backbone.backbone
+        backbone = model.backbone
         self.conv1 = backbone.conv1
         self.bn1 = backbone.bn1
         self.relu = backbone.relu
@@ -163,6 +170,7 @@ class Pyramid(nn.Module):
 
 class PyramidAttention(nn.Module):
     """输出为以金字塔特征图为通道的通道间注意力后的特征图"""
+
     def __init__(self, out_channels):
         super().__init__()
         self.upsample = nn.Upsample((128, 8), mode='bilinear', align_corners=True)
