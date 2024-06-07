@@ -1,4 +1,4 @@
-from typing import Literal, Type
+from typing import Literal
 
 import torch
 from torch import nn
@@ -9,7 +9,7 @@ import modules
 
 
 class Custom_ResNet18(nn.Module):
-    def __init__(self, feature_module: Type[feature_modules.STFT_Magnitude_Feature | feature_modules.CPSD_Phase_Feature | feature_modules.CPSD_Phase_Diff_Feature], fs, fc, f_low, f_high, label_type: Literal['direction', 'position']):
+    def __init__(self, feature_module: feature_modules.FeatureModule, fs, fc, f_low, f_high, label_type: Literal['direction', 'position']):
         super().__init__()
         self.feature = feature_module(fs, fc, f_low, f_high)
         self.backbone = resnet18(num_classes=2 if label_type == 'direction' else 3)
@@ -22,7 +22,7 @@ class Custom_ResNet18(nn.Module):
 
 
 class Custom_ViT_B_32(nn.Module):
-    def __init__(self, feature_module: feature_modules.STFT_Magnitude_Feature | feature_modules.CPSD_Phase_Feature | feature_modules.CPSD_Phase_Diff_Feature, fs, fc, f_low, f_high, label_type: Literal['direction', 'position']):
+    def __init__(self, feature_module: feature_modules.FeatureModule, fs, fc, f_low, f_high, label_type: Literal['direction', 'position']):
         super().__init__()
         self.feature = feature_module(fs, fc, f_low, f_high)
         self.backbone = vit_b_32(num_classes=2 if label_type == 'direction' else 3)

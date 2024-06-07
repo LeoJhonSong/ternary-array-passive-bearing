@@ -1,3 +1,5 @@
+from typing import Type, Union
+
 import numpy as np
 import torch
 from torch import nn
@@ -161,6 +163,16 @@ class STFT_Magnitude_Feature(Cropped_Feature):
         return x, musk
 
 
+class STFT_Phase_Feature(Cropped_Feature):
+    def __init__(self, fs, fc, f_low, f_high):
+        super().__init__(fs, fc, f_low, f_high)
+
+    def forward(self, x):
+        x, musk = super().forward(x)
+        x = torch.angle(x)
+        return x, musk
+
+
 class CPSD_Phase_Feature(Cropped_Feature):
     def __init__(self, fs, fc, f_low, f_high):
         super().__init__(fs, fc, f_low, f_high)
@@ -182,3 +194,11 @@ class CPSD_Phase_Diff_Feature(Cropped_Feature):
         x = self.cpsd_phase(x)
         x = torch.diff(x, dim=-2)
         return x, musk
+
+
+FeatureModule = Union[
+    Type[STFT_Magnitude_Feature],
+    Type[STFT_Phase_Feature],
+    Type[CPSD_Phase_Feature],
+    Type[CPSD_Phase_Diff_Feature],
+]

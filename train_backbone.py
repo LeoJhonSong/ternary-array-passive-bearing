@@ -28,11 +28,14 @@ dataset_path = f'/root/autodl-tmp/dataset/fc-{fc}_fs_factor-{fs_factor}_d-{d}_K-
 train_path = f'{dataset_path}/train'
 val_path = f'{dataset_path}/val'
 
-features = {
-    feature_modules.STFT_Magnitude_Feature.__name__: feature_modules.STFT_Magnitude_Feature,
-    feature_modules.CPSD_Phase_Feature.__name__: feature_modules.CPSD_Phase_Feature,
-    feature_modules.CPSD_Phase_Diff_Feature.__name__: feature_modules.CPSD_Phase_Diff_Feature,
-}
+features = {feature_module.__name__: feature_module for feature_module in [
+    feature_modules.STFT_Magnitude_Feature,
+    feature_modules.STFT_Phase_Feature,
+    feature_modules.CPSD_Phase_Feature,
+    feature_modules.CPSD_Phase_Diff_Feature,
+]}
+
+# %%
 
 project = 'backbone'
 
@@ -43,8 +46,8 @@ config = Namespace(
     step_size=10,
     gamma=0.5,
     feature='CPSD_Phase_Diff_Feature',
-    batch_size=90,
-    lr=1e-6,
+    batch_size=84,
+    lr=1e-3,
 )
 sweep_config = {
     'method': 'random',
@@ -54,9 +57,9 @@ sweep_config = {
     },
     'early_terminate': {
         'type': 'hyperband',
-        'min_iter': 5,
+        'min_iter': 3,
         'eta': 2,
-        's': 2,
+        's': 3,
     },
     'parameters': {
         'label_type': {'value': config.label_type},
@@ -66,16 +69,11 @@ sweep_config = {
         'feature': {
             'values': list(features.keys())
         },
-        'batch_size': {
-            'distribution': 'q_log_uniform_values',
-            'q': 8,
-            'min': 24,
-            'max': 90,
-        },
+        'batch_size': {'value': 28},
         'lr': {
             'distribution': 'log_uniform_values',
-            'min': 1e-6,
-            'max': 1e-3,
+            'max': 1e-2,
+            'min': 1e-4,
         },
     },
 }
@@ -84,8 +82,11 @@ if sweep:
 
 
 # %% train script definition
-def train(config, wandb_cb):
-    exp_path = f'./exp/{config.feature}'
+def train(config, wandb_cb, worker_id=None):
+    if worker_id is not None:
+        exp_path = f'./exp/{worker_id}/{config.feature}'
+    else:
+        exp_path = f'./exp/{config.feature}'
     if not os.path.exists(exp_path):
         os.makedirs(exp_path)
 
@@ -127,13 +128,26 @@ def train(config, wandb_cb):
 
 
 # %% train
-def sweep_callback():
-    wandb_cb = WandbCallback(project=project, config=config)
-    with wandb.init(name=wandb_cb.name):
-        train(wandb.config, wandb_cb)
+def sweep_callback_factory(worker_id):
+    def sweep_callback():
+        wandb_cb = WandbCallback(project=project, config=config)
+        with wandb.init(name=wandb_cb.name):
+            train(wandb.config, wandb_cb, worker_id)
+    return sweep_callback
 
 
 if sweep:
-    wandb.agent(sweep_id, sweep_callback, count=50)
+    def worker(worker_id):
+        wandb.agent(sweep_id, sweep_callback_factory(worker_id), count=30)
+
+    import multiprocessing
+    jobs = 3
+    processes = []
+    for i in range(jobs):
+        p = multiprocessing.Process(target=worker, args=(i,))
+        p.start()
+        processes.append(p)
+    for p in processes:
+        p.join()
 else:
     train(config, wandb_cb=None)
