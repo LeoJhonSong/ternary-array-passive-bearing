@@ -79,29 +79,29 @@ class Array_Data_DataSet(Dataset):
         Parameters
         ----------
         labels : torch.Tensor
-            shape: [batch, 2] or [batch, 3]
+            shape: [batch, 2 or 3] or [batch, seq_len, 2 or 3]
         Returns
         -------
         angles : torch.Tensor
-            shape: [batch]
+            shape: [batch] or [batch, seq_len]
         """
-        return torch.rad2deg(torch.atan2(labels[:, 1], labels[:, 0]))
+        return torch.rad2deg(torch.atan2(labels[..., 1], labels[..., 0]))
 
     def labels2positions(self, labels: torch.Tensor):
         """
         Parameters
         ----------
         labels : torch.Tensor
-            shape: [batch, 3]
+            shape: [batch, 3] or [batch, seq_len, 3]
         Returns
         -------
         distances : torch.Tensor
-            shape: [batch]
+            shape: [batch] or [batch, seq_len]
         angles : torch.Tensor
-            shape: [batch]
+            shape: [batch] or [batch, seq_len]
         """
         # limit to known range, maybe out of range because of precision
-        distances = labels[:, 2].clamp(min=0, max=1)
+        distances = labels[..., 2].clamp(min=0, max=1)
         # map from [0, 1] to distance_range
         distances = distances * (self.distance_range[1] - self.distance_range[0]) + self.distance_range[0]
         return distances, self.labels2angles(labels)
