@@ -26,6 +26,7 @@
         "scaleanchor",
         "scaleratio",
         "tileable",
+        "torchaudio",
         "torchkeras",
         "torchmetrics",
         "wandb",
