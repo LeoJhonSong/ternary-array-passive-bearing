@@ -40,7 +40,6 @@ features = {
 }
 
 project = 'AC-LSTM'
-
 sweep = True
 config = Namespace(
     label_type='direction',
@@ -84,11 +83,17 @@ sweep_config = {
         },
     },
 }
-if sweep:
-    sweep_id = wandb.sweep(sweep_config, project=project)
 
 
 # %% train script definition
+def build_model(config):
+    checkpoint = torch.load(f'models/{config.feature}_ResNet18.pt')
+    backbone_wrapper = models.Custom_ResNet18(features[config.feature], fs, fc, 20e3, 60e3, config.label_type)
+    backbone_wrapper.load_state_dict(checkpoint)
+    net = models.Resnet18_attConvLSTM(backbone_wrapper, fs, fc, 20e3, 60e3, config.label_type)
+    return net
+
+
 def train(config, wandb_cb):
     exp_path = f'./exp/{config.feature}-AC-LSTM'
     if not os.path.exists(exp_path):
@@ -99,10 +104,7 @@ def train(config, wandb_cb):
     dl_train = DataLoader(ds_train, batch_size=config.batch_size, shuffle=True, num_workers=16, drop_last=False)
     dl_val = DataLoader(ds_val, batch_size=config.batch_size, shuffle=True, num_workers=16, drop_last=False)
 
-    checkpoint = torch.load(f'models/{config.feature}_ResNet18.pt')
-    backbone_wrapper = models.Custom_ResNet18(features[config.feature], fs, fc, 20e3, 60e3, config.label_type)
-    backbone_wrapper.load_state_dict(checkpoint)
-    net = models.Resnet18_attConvLSTM(backbone_wrapper, fs, fc, 20e3, 60e3, config.label_type)
+    net = build_model(config)
     optimizer = optim.Adam(net.parameters(), lr=config.lr)
     # lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=config.step_size, gamma=config.gamma)
 
@@ -154,13 +156,16 @@ def train(config, wandb_cb):
 
 
 # %% train
-def sweep_callback():
-    wandb_cb = WandbCallback(project=project, config=config)
-    with wandb.init(name=wandb_cb.name):
-        train(wandb.config, wandb_cb)
+if __name__ == '__main__':
+    if sweep:
+        sweep_id = wandb.sweep(sweep_config, project=project)
 
+    def sweep_callback():
+        wandb_cb = WandbCallback(project=project, config=config)
+        with wandb.init(name=wandb_cb.name):
+            train(wandb.config, wandb_cb)
 
-if sweep:
-    wandb.agent(sweep_id, sweep_callback, count=50)
-else:
-    train(config, wandb_cb=None)
+    if sweep:
+        wandb.agent(sweep_id, sweep_callback, count=50)
+    else:
+        train(config, wandb_cb=None)
