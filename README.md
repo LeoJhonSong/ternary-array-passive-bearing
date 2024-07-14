@@ -11,10 +11,11 @@ passive bearing based on ternary sonar array
 
 ### 树莓派作为网关组网
 
-- 电脑侧设置与`10.30.4.77`通信时通过**eth0**接口收发, 网关为`10.30.4.77`
+- 电脑侧设置**eth0**静态ip为`10.3.21.67`
+- 电脑侧设置与MARS@`10.30.4.77`通信时通过**eth0**接口收发, 网关为`10.3.21.66`
 
 	```sh
-	sudo ip route add 10.30.4.77 via [树莓派eth0 ip] dev eth0
+	sudo ip route add 10.30.4.77 via 10.3.21.66 dev eth0
 	```
 
 - 树莓派侧**eth1**设置静态ip为`10.30.4.1`, 子网掩码`255.255.255.0`, 网关`10.30.4.1`, 开启ip转发
@@ -37,6 +38,25 @@ sudo ip route del default via <gateway_ip> dev <interface>
 # 添加路由并设置优先级 (数值越小优先级越高)
 sudo ip route add default via <gateway_ip> dev <interface> metric <new_metric>
 ```
+
+## 模型
+
+```mermaid
+graph TD
+a("三元阵列数据 (3,seq_len*fs)")--TBD: 数据增强--> b(TBD: N元阵列数据)
+b--1s时间窗的stft-->c("时序时频图 (seq_len,3,f_len,t_len)")--angle-->d("时序时频相位图 (seq_len,3,f_len,t_len)")--ResNet18-->h("时序金字塔相位特征 (seq_len, (4特征图))")-->g("相位金字塔特征注意力  (seq_len, (4注意力图))")-->i("·")--convLSTMx4-->j("经过时序增强的相位金字塔特征 (seq_len, (4特征图))")--检测头-->k("时序角度/位置预测值 (seq_len, 2/3)")
+h-->i
+
+c--abs-->f("时序时频幅度图 (seq_len,3,f_len,t_len)")--ResNet18-->e("时序金字塔幅度特征 (seq_len, (4特征图))")
+```
+
+TODO: 调查convLSTM的意义, 或者说输出与输入的区别, 确认我的注意力确实有用
+- 考虑直接将相幅金字塔特征拼接
+
+### 特征增强
+
+- 将三阵元数据以线性预测虚拟阵元补阵元减小阵元间距
+- 将三阵元数据输入到GAN, 生成更多阵元的数据. 如果仅用于数据增强, 若背景仅是白噪声无意义
 
 ## 仿真
 
