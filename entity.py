@@ -149,8 +149,10 @@ class Array_Data_Sampler:
         self.source.set_noise_params(0, 0, 1)
         self.array.set_noise_params(0, 0, 0)
 
-    def set_SNR(self, SNR_dB):
-        deviation = (10 ** (SNR_dB / -20)) / self.source.r
+    def set_SNR(self, snr_dB, fs, bandwidth):
+        offset = (fs / 2 / bandwidth) ** 0.5  # 使信号频带内噪声平均功率为1
+        gain = 1 / self.source.r / 10**(snr_dB / 20)  # 当信号频带内噪声平均功率为1时, 使SNR=snr_dB的噪声增益
+        deviation = gain * offset
         self.array.set_noise_params(deviation, deviation, deviation)
 
     @staticmethod
