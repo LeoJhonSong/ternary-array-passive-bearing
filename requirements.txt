@@ -1,6 +1,6 @@
 autopep8
-tqdm
 ipympl
+yacs
 
 dash
 
@@ -11,9 +11,5 @@ matplotlib
 
 soundfile
 
--r torch-requirments.txt
-
-accelerate
-torchkeras
-torchmetrics
-wandb
+-r requirements/torch.txt
+-r requirements/train.txt

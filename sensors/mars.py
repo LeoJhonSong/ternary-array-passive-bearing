@@ -5,11 +5,11 @@ import struct
 import numpy as np
 
 # 创建日志记录器
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('MARS')
 
 
 class Mars:
-    def __init__(self, ip: str, command_port: int, data_port: int):
+    def __init__(self, ip: str, command_port: int, data_port: int, **kwargs):
         self.ip = ip
         self.command_port = command_port
         self.data_port = data_port
