@@ -39,6 +39,22 @@ sudo ip route del default via <gateway_ip> dev <interface>
 sudo ip route add default via <gateway_ip> dev <interface> metric <new_metric>
 ```
 
+#### 通过IDSSE有线网远程访问
+
+1. 确保树莓派不在金属舱内（可接收到WiFi信号）
+2. 电脑有线连接树莓派，ssh中以`sudo nmtui`连接手机热点并断开树莓派中ip为`10.30.4.1`的接口
+3. 树莓派有线连接入IDSSE有线网，电脑接入手机热点
+4. 以TigerVNC访问ip`leo-rpi4.local`，打开浏览器访问登录页面
+
+#### 故障修复
+
+遇到无法访问的情况，可尝试以下方法：
+1. 检查网络链路是否断路、连接不稳定，裸露处是否有生锈
+2. 检查电脑对应网络接口是否设置了静态ip
+3. 断开电脑其他网络接口，避免因为掩码问题使用了错误的网关
+4. 重启树莓派
+5. 重启电脑
+
 ## 模型
 
 ```mermaid
