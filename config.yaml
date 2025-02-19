@@ -1,0 +1,15 @@
+mars:
+  ip: '10.30.4.77'
+  command_port: 7777
+  data_port: 7778
+  fs: 512000
+  channels: 3
+signal:
+  c: 1500.0
+  f: 42500
+  prf: 1
+  pulse_width: 10e-3
+  fs: 340000  # 8 times oversampling
+array:
+  d: 0.5
+  K: 1

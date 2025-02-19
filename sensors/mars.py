@@ -3,24 +3,35 @@ import socket
 import struct
 
 import numpy as np
+import torch
+import torchaudio
+from yacs.config import CfgNode as CN
 
 # 创建日志记录器
 logger = logging.getLogger('MARS')
 
 
 class Mars:
-    def __init__(self, ip: str, command_port: int, data_port: int, **kwargs):
-        self.ip = ip
-        self.command_port = command_port
-        self.data_port = data_port
+    def __init__(self, cfg: CN):
+        self.cfg = cfg
+        self.ip = cfg.mars.ip
+        self.command_port = cfg.mars.command_port
+        self.data_port = cfg.mars.data_port
         self.command_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.data_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.header_len = 6
         self.preamble = 0xFEFE
         self.protocol_version = 0x0001
         self.msg_scrambler_number = 0x5A5C
-        self.channels = 3
+        self.channels = cfg.mars.channels
         self.sample_bytes = 3
+        self.downsampler = torchaudio.transforms.Resample(cfg.mars.fs, cfg.signal.fs)
+        self.window = np.hanning
+        self.overlap = 110  # 正常情况mars每次发送110组数据
+        self.downsampled_overlap = int(np.ceil(self.overlap * cfg.signal.fs / cfg.mars.fs))  # 下采样后的重叠长度
+        self.overlap_win = np.zeros((self.channels, self.overlap))
+        # 目前作为*降采样*后最后cfg.signal.fs个阵列数据样本的缓冲区
+        self.array_data_buf = np.zeros((self.channels, 0))
 
     def connect(self):
         self.command_sock.connect((self.ip, self.command_port))
@@ -73,7 +84,7 @@ class Mars:
             return True, None
         return True, frame_length
 
-    def read_data_frame(self, frame_length):
+    def read_data_frame(self, frame_length: int):
         data = b''
         while len(data) < frame_length - self.header_len:
             chunk = self.data_sock.recv(frame_length - self.header_len - len(data))
@@ -112,9 +123,37 @@ class Mars:
 
         return True, np.array(array_data).astype(np.float32).T  # shape: (channels, sample_num)
 
+    def stack_data(self, data):
+        # TODO: 考虑一个线程存一个线程加窗降采样
+        self.overlap_win = self.overlap_win[:, :self.overlap]
+        self.overlap_win = np.concatenate((self.overlap_win, data), axis=1)
+        windowed_data = self.downsampler(torch.tensor(self.overlap_win).float()).numpy()
+        if self.array_data_buf.shape[1] == 0:
+            self.array_data_buf = windowed_data[:, self.downsampled_overlap - 1:]  # 初始化时overlap_win中为全零
+            return None
+        self.array_data_buf[:, -self.downsampled_overlap:] += windowed_data[:, :self.downsampled_overlap]
+        self.array_data_buf = np.concatenate((self.array_data_buf, windowed_data[:, self.downsampled_overlap:]), axis=1)
+        if self.array_data_buf.shape[1] > self.cfg.signal.fs:
+            self.array_data_buf = self.array_data_buf[:, -self.cfg.signal.fs:]
+            return self.array_data_buf
+        else:
+            return None
+
 
 if __name__ == '__main__':
-    mars = Mars('10.30.4.77', 7777, 7778)
+    config = CN({
+        'mars': {
+            'ip': '10.30.4.77',
+            'command_port': 7777,
+            'data_port': 7778,
+            'fs': 512000,
+            'channels': 3,
+        },
+        'signal': {
+            'fs': 340000,
+        }
+    })
+    mars = Mars(config)
     mars.connect()
     mars.record_switch(True)
     while True:

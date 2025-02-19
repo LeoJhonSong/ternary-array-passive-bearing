@@ -12,6 +12,7 @@
         "BBBBH",
         "cmap",
         "cpsd",
+        "downsampler",
         "gridcolor",
         "hyperband",
         "interp",
