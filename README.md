@@ -44,7 +44,7 @@ sudo ip route add default via <gateway_ip> dev <interface> metric <new_metric>
 1. 确保树莓派不在金属舱内（可接收到WiFi信号）
 2. 电脑有线连接树莓派，ssh中以`sudo nmtui`连接手机热点并断开树莓派中ip为`10.30.4.1`的接口
 3. 树莓派有线连接入IDSSE有线网，电脑接入手机热点
-4. 以TigerVNC访问ip`leo-rpi4.local`，打开浏览器访问登录页面
+4. 以TigerVNC访问ip`leo-rpi4.local` (要求本机启用了mdns服务) 或ip`10.3.21.66`，打开浏览器访问登录页面
 
 #### 故障修复
 
