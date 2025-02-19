@@ -3,40 +3,15 @@ from typing import Tuple
 import numpy as np
 from cpsd_tde import cpsd_tde
 from xcorr_tde import xcorr_tde
+from yacs.config import CfgNode as CN
+
+from ..estimator import Estimator
 
 
-def cw_delay_estimation(x1: np.ndarray, x2: np.ndarray, fs: float, f: float, period: float, T_on: float, up_sample_scale: int) -> float:
-    from scipy import interpolate
-    """基于CW信号的时延估计
-
-    Parameters
-    ----------
-    x1 : np.ndarray
-        信号1序列 (左侧)
-    x2 : np.ndarray
-        信号2序列 (右侧)
-    fs : float
-        信号采样频率 (Hz)
-    f : float
-        CW信号载波频率 (Hz)
-    period : float
-        CW信号周期 (s)
-    T_on : float
-        CW信号有效时长 (s)
-
-    Returns
-    -------
-    float
-        时延估计值tau (s)
-        """
-    t = np.arange(len(x1)) / fs
-    t_new = np.arange(up_sample_scale * len(x1)) / fs / up_sample_scale
-    x1 = interpolate.interp1d(t, x1, kind='cubic', fill_value='extrapolate')(t_new)  # type: ignore
-    x2 = interpolate.interp1d(t, x2, kind='cubic', fill_value='extrapolate')(t_new)  # type: ignore
-    s_ref = np.cos(2 * np.pi * f * t_new) * (t_new % period < T_on)
-    tau1_frac = xcorr_tde(x1, s_ref, f, fs * up_sample_scale)
-    tau2_frac = xcorr_tde(x2, s_ref, f, fs * up_sample_scale)
-    return tau1_frac - tau2_frac
+class Three_Ele_TDE_Estimator(Estimator):
+    # TODO
+    def __init__(self):
+        pass
 
 
 def far_locate(t12: float, t23: float, c: float, K: float, d: float) -> Tuple[float, float]:
@@ -104,6 +79,43 @@ def near_locate(t12: float, t23: float, c: float, K: float, d: float) -> Tuple[f
     else:
         theta = np.arccos((r**2 + d2**2 - r2**2) / (2 * r * d2))
     return r, np.rad2deg(theta)
+
+
+def cw_delay_estimation(x1: np.ndarray, x2: np.ndarray, sig_cfg: CN, up_sample_scale: int) -> float:
+    import copy
+    from scipy import interpolate
+    """基于CW信号的时延估计
+
+    Parameters
+    ----------
+    x1 : np.ndarray
+        信号1序列 (左侧)
+    x2 : np.ndarray
+        信号2序列 (右侧)
+    fs : float
+        信号采样频率 (Hz)
+    f : float
+        CW信号载波频率 (Hz)
+    period : float
+        CW信号周期 (s)
+    T_on : float
+        CW信号有效时长 (s)
+
+    Returns
+    -------
+    float
+        时延估计值tau (s)
+        """
+    t = np.arange(len(x1)) / sig_cfg.fs
+    t_new = np.arange(up_sample_scale * len(x1)) / sig_cfg.fs / up_sample_scale
+    x1 = interpolate.interp1d(t, x1, kind='cubic', fill_value='extrapolate')(t_new)  # type: ignore
+    x2 = interpolate.interp1d(t, x2, kind='cubic', fill_value='extrapolate')(t_new)  # type: ignore
+    s_ref = np.cos(2 * np.pi * sig_cfg.f * t_new) * (t_new % sig_cfg.prf < sig_cfg.pulse_width)
+    new_sig_cfg = copy.deepcopy(sig_cfg)
+    new_sig_cfg.fs = up_sample_scale * new_sig_cfg.fs
+    tau1_frac = xcorr_tde(x1, s_ref, new_sig_cfg)
+    tau2_frac = xcorr_tde(x2, s_ref, new_sig_cfg)
+    return tau1_frac - tau2_frac
 
 
 def ambiguity_resolution(phi12_frac: float, phi23_frac: float, K: float, d: float) -> Tuple[float, float]:
